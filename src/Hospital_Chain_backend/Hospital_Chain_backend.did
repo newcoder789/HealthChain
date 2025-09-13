@@ -19,17 +19,19 @@ type PatientProfile = record {
   created_at : nat64;
   user_id : principal;
 };
-type Result = variant { Ok : vec MedicalRecord; Err : text };
-type Result_1 = variant { Ok : PatientProfile; Err : text };
-type Result_2 = variant { Ok; Err : text };
-type Result_3 = variant { Ok : text; Err : text };
+type Result = variant { Ok : text; Err : text };
+type Result_1 = variant { Ok : vec MedicalRecord; Err : text };
+type Result_2 = variant { Ok : PatientProfile; Err : text };
+type Result_3 = variant { Ok; Err : text };
 service : () -> {
-  get_my_records : () -> (Result) query;
-  get_profile : () -> (Result_1) query;
-  grant_access : (text, principal, AccessPermission) -> (Result_2);
-  register_user : () -> (Result_3);
+  create_folder : (text, opt text) -> (Result);
+  get_my_records : () -> (Result_1) query;
+  get_profile : () -> (Result_2) query;
+  grant_access : (text, principal, AccessPermission) -> (Result_3);
+  register_user : () -> (Result);
+  revoke_access : (text, principal) -> (Result_3);
   shared_with_me : () -> (vec MedicalRecord) query;
-  submit_for_research : (text) -> (Result_2);
-  update_settings : () -> (Result_2);
-  upload_record : (blob, text, opt text) -> (Result_3);
+  submit_for_research : (text) -> (Result_3);
+  update_settings : () -> (Result_3);
+  upload_record : (blob, text, opt text) -> (Result);
 }

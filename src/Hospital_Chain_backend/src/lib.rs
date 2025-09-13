@@ -8,7 +8,9 @@ use sha2::{Sha256, Digest};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::borrow::Cow;
-use ic_cdk::api::msg_caller;
+use ic_cdk::api::time;
+use ic_cdk::caller;
+
 // --- Data Structures ---
 
 #[derive(CandidType, Deserialize, Serialize, Clone)]
@@ -67,8 +69,9 @@ impl Storable for AccessPermission {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         candid::decode_one(bytes.as_ref()).expect("Failed to decode AccessPermission")
     }
+    
     fn into_bytes(self) -> Vec<u8> {
-        candid::encode_one(self).expect("Failed to encode AccessPermission")
+        candid::encode_one(self).expect("Failed to encode MedicalRecord")
     }
     const BOUND: Bound = Bound::Unbounded;
 }
@@ -79,11 +82,12 @@ impl Storable for PatientProfile {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         candid::decode_one(bytes.as_ref()).expect("Failed to decode PatientProfile")
     }
+    
     fn into_bytes(self) -> Vec<u8> {
-        candid::encode_one(self).expect("Failed to encode PatientProfile")
+        candid::encode_one(self).expect("Failed to encode MedicalRecord")
     }
     const BOUND: Bound = Bound::Unbounded;
-}   
+}
 impl Storable for AuditLog {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(candid::encode_one(self).expect("Failed to encode AuditLog"))
@@ -91,8 +95,9 @@ impl Storable for AuditLog {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         candid::decode_one(bytes.as_ref()).expect("Failed to decode AuditLog")
     }
+    
     fn into_bytes(self) -> Vec<u8> {
-        candid::encode_one(self).expect("Failed to encode AuditLog")
+        candid::encode_one(self).expect("Failed to encode MedicalRecord")
     }
     const BOUND: Bound = Bound::Unbounded;
 }
@@ -133,7 +138,7 @@ fn generate_hash(data: &[u8]) -> String {
 }
 
 fn get_caller() -> Principal {
-    msg_caller()
+    caller()
 }
 
 fn log_action(record_id: String, action: String) {
@@ -148,34 +153,29 @@ fn log_action(record_id: String, action: String) {
     });
 }
 
-
 // --- Canister Endpoints ---
+
 #[update]
 fn register_user() -> Result<String, String> {
-    // Get the caller's principal (their unique identifier on the IC).
     let caller = get_caller();
+    let caller_bytes = caller.as_slice().to_vec();
 
-    // Use `PATIENTS` to check if the caller is already registered.
     let already_registered = PATIENTS.with(|patients| {
-        let patients_ref = patients.borrow();
-        patients_ref.contains_key(&caller.as_slice().to_vec())
+        patients.borrow().contains_key(&caller_bytes)
     });
+    
     if already_registered {
-        // Return an error if the user already exists.
         return Err("User already registered".to_string());
     }
 
-    // Create a new PatientProfile.
     let profile = PatientProfile {
         user_id: caller,
         created_at: ic_cdk::api::time(),
-        records: vec![], // A new user has no medical records yet.
+        records: vec![],
     };
 
-    // Insert the new profile into the `PATIENTS` map.
     PATIENTS.with(|patients| {
-        let mut patients_mut = patients.borrow_mut();
-        patients_mut.insert(caller.as_slice().to_vec(), profile);
+        patients.borrow_mut().insert(caller_bytes, profile);
     });
 
     Ok("User registered successfully".to_string())
@@ -187,6 +187,7 @@ fn upload_record(file_data: ByteBuf, file_type: String, parent_folder_id: Option
     let caller = get_caller();
     let caller_bytes = caller.as_slice().to_vec();
     let patient_exists = PATIENTS.with(|patients| patients.borrow().contains_key(&caller_bytes));
+    
     if !patient_exists {
         return Err("Patient not registered".to_string());
     }
@@ -210,7 +211,7 @@ fn upload_record(file_data: ByteBuf, file_type: String, parent_folder_id: Option
         file_type,
         timestamp: ic_cdk::api::time(),
         access_list,
-        parent_folder_id, 
+        parent_folder_id,
     };
 
     RECORDS.with(|records| {
@@ -219,14 +220,81 @@ fn upload_record(file_data: ByteBuf, file_type: String, parent_folder_id: Option
 
     PATIENTS.with(|patients| {
         let mut patients_mut = patients.borrow_mut();
-        if let Some(mut profile) = patients_mut.get(&caller.as_slice().to_vec()) {
+        if let Some(mut profile) = patients_mut.get(&caller_bytes) {
             profile.records.push(record_id.clone());
-            patients_mut.insert(caller.as_slice().to_vec(), profile);
+            patients_mut.insert(caller_bytes, profile);
         }
     });
 
     log_action(record_id.clone(), "upload".to_string());
     Ok(record_id)
+}
+
+#[update]
+fn create_folder(folder_name: String, parent_folder_id: Option<String>) -> Result<String, String> {
+    let caller = get_caller();
+    let caller_bytes = caller.as_slice().to_vec();
+    let patient_exists = PATIENTS.with(|patients| patients.borrow().contains_key(&caller_bytes));
+    
+    if !patient_exists {
+        return Err("Patient not registered".to_string());
+    }
+    
+    // Generate a unique ID for the folder. A hash of the caller's ID and timestamp is a good approach.
+    let folder_id_data = format!("{}-{}", caller.to_text(), ic_cdk::api::time());
+    let folder_id = generate_hash(folder_id_data.as_bytes());
+
+    // A folder is a special type of MedicalRecord with no file_hash and "folder" as its type.
+    let folder_record = MedicalRecord {
+        record_id: folder_id.clone(),
+        owner: caller,
+        file_hash: "".to_string(),
+        file_type: "folder".to_string(),
+        timestamp: ic_cdk::api::time(),
+        access_list: HashMap::new(),
+        parent_folder_id,
+    };
+
+    RECORDS.with(|records| {
+        records.borrow_mut().insert(folder_id.clone(), folder_record);
+    });
+    
+    // Add the folder's ID to the patient's record list.
+    PATIENTS.with(|patients| {
+        let mut patients_mut = patients.borrow_mut();
+        if let Some(mut profile) = patients_mut.get(&caller_bytes) {
+            profile.records.push(folder_id.clone());
+            patients_mut.insert(caller_bytes, profile);
+        }
+    });
+
+    log_action(folder_id.clone(), "create_folder".to_string());
+    Ok(folder_id)
+}
+
+#[update]
+fn revoke_access(record_id: String, to_principal: Principal) -> Result<(), String> {
+    let caller = get_caller();
+
+    RECORDS.with(|records| {
+        let mut records_ref = records.borrow_mut();
+        
+        // Find the record and ensure the caller is the owner.
+        if let Some(mut record) = records_ref.get(&record_id) {
+            if record.owner != caller {
+                return Err("Record not owned by caller".to_string());
+            }
+
+            // Remove the principal from the access list.
+            record.access_list.remove(&to_principal);
+            records_ref.insert(record_id.clone(), record);
+            
+            log_action(record_id, format!("revoke_access_from_{}", to_principal.to_text()));
+            Ok(())
+        } else {
+            Err("Record not found".to_string())
+        }
+    })
 }
 
 #[query]
@@ -334,20 +402,6 @@ fn update_settings() -> Result<(), String> {
 }
 
 #[init]
-fn init() {
-    let caller = get_caller();
-    PATIENTS.with(|patients| {
-        let mut patients_mut = patients.borrow_mut();
-        let caller_bytes = caller.as_slice().to_vec();
-        if !patients_mut.contains_key(&caller_bytes) {
-            let profile = PatientProfile {
-                user_id: caller,
-                created_at: ic_cdk::api::time(),
-                records: vec![],
-            };
-            patients_mut.insert(caller_bytes, profile);
-        }
-    });
-}
+fn init() {}
 
 ic_cdk::export_candid!();
