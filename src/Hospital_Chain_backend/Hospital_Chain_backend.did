@@ -1,3 +1,35 @@
-service : {
-    "greet": (text) -> (text) query;
+type AccessPermission = record {
+  is_anonymized : bool;
+  can_share : bool;
+  expiry : opt nat64;
+  can_edit : bool;
+  can_view : bool;
+};
+type MedicalRecord = record {
+  owner : principal;
+  file_hash : text;
+  file_type : text;
+  parent_folder_id : opt text;
+  timestamp : nat64;
+  record_id : text;
+  access_list : vec record { principal; AccessPermission };
+};
+type PatientProfile = record {
+  records : vec text;
+  created_at : nat64;
+  user_id : principal;
+};
+type Result = variant { Ok : vec MedicalRecord; Err : text };
+type Result_1 = variant { Ok : PatientProfile; Err : text };
+type Result_2 = variant { Ok; Err : text };
+type Result_3 = variant { Ok : text; Err : text };
+service : () -> {
+  get_my_records : () -> (Result) query;
+  get_profile : () -> (Result_1) query;
+  grant_access : (text, principal, AccessPermission) -> (Result_2);
+  register_user : () -> (Result_3);
+  shared_with_me : () -> (vec MedicalRecord) query;
+  submit_for_research : (text) -> (Result_2);
+  update_settings : () -> (Result_2);
+  upload_record : (blob, text, opt text) -> (Result_3);
 }
