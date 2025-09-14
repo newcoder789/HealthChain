@@ -3,8 +3,62 @@ import { User, Upload, Share2, Shield, Eye, FileText, Clock } from 'lucide-react
 import RoleDiagram from '../components/RoleDiagram';
 import FeatureCard from '../components/FeatureCard';
 import { Link } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Hospital_Chain_backend } from "declarations/Hospital_Chain_backend";
 
 const Patient = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState('landing');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [canister, setCanister] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+
+  
+  const handleAccess = async () => {
+    setLoading(true);
+    try {
+      // Step 1: Check if user already has a profile
+      let profile;
+      const result = await Hospital_Chain_backend.get_profile();
+      if (result.Err) {
+        console.log(result.Err)
+        if (result.Err.includes("User not found")) {
+          // User not registered, so register them
+          const regResult = await Hospital_Chain_backend.register_user({ Patient: null });
+          if (regResult.Err) {
+            console.log(regResult.Err);
+          }
+          console.log("User registered as patient:", regResult.Ok);
+          // After registration, get the profile
+          const newResult = await Hospital_Chain_backend.get_profile();
+          if (newResult.Err) {
+            throw new Error(newResult.Err);
+          }
+          profile = newResult.Ok;
+        } else {
+          throw new Error(result.Err);
+        }
+      } else {
+        profile = result.Ok;
+        console.log("User already has a profile:", profile);
+      }
+
+      // Update central state with user data
+      setIsAuthenticated(true);
+      setUserRole('patient');
+      setCurrentPage('patient-dashboard');
+
+      // Step 3: Redirect to dashboard
+      navigate("/dashboard/patient");
+    } catch (err) {
+      console.error("Error accessing patient dashboard:", err);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
   const beforeItems = [
     "Medical records scattered across multiple providers",
     "No control over who accesses your data",
@@ -47,7 +101,6 @@ const Patient = () => {
       color: "neon"
     }
   ];
-
   return (
     <div className="pt-24 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -73,13 +126,19 @@ const Patient = () => {
             Take complete ownership of your medical records. Upload, organize, and share your health data 
             with healthcare providers on your terms, with full transparency and security.
           </p>
-
-          <Link
+          <button
+              onClick={handleAccess}
+              disabled={loading}
+              className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold rounded-xl hover:from-primary-600 hover:to-secondary-600 transform hover:scale-105 transition-all duration-200 neon-glow"
+            >
+              {loading ? "Preparing your dashboard..." : "Access Patient Dashboard"}
+            </button>
+          {/* <Link
             to="/dashboard/patient"
             className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold rounded-xl hover:from-primary-600 hover:to-secondary-600 transform hover:scale-105 transition-all duration-200 neon-glow"
           >
             Access Patient Dashboard
-          </Link>
+          </Link> */}
         </motion.div>
 
         {/* Problem vs Solution */}

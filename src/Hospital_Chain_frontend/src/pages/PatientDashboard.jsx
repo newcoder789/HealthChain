@@ -6,7 +6,7 @@ import AuditLogTable from '../components/AuditLogTable';
 const PatientDashboard = () => {
   const [activeTab, setActiveTab] = useState('records');
   const [showUploadModal, setShowUploadModal] = useState(false);
-
+  
   const mockRecords = [
     {
       id: 1,

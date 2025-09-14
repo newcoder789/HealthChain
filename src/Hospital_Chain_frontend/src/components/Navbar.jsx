@@ -90,12 +90,12 @@ const Navbar = () => {
           ) : (
             <Button onClick={logout}>Logout</Button>
           )}
-          {state.principal && (
+          {state.authClient && (
             <div>
               <h2>Your principal ID is:</h2>
-              <h4>{state.principal}</h4>
+              <h4>{state.authClient.getIdentity().getPrincipal().toString()}</h4>
             </div>
-          )}
+          )}  
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
             <div className="relative">
