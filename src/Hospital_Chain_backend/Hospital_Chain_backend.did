@@ -8,6 +8,7 @@ type AccessPermission = record {
 type MedicalRecord = record {
   owner : principal;
   file_hash : text;
+  file_name : opt text;
   file_type : text;
   parent_folder_id : opt text;
   timestamp : nat64;
@@ -35,5 +36,5 @@ service : () -> {
   shared_with_me : () -> (Result_1) query;
   submit_for_research : (text) -> (Result_3);
   update_settings : () -> (Result_3);
-  upload_record : (blob, text, opt text) -> (Result);
+  upload_record : (text, text, text, opt text) -> (Result);
 }

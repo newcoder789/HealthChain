@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Menu, X, Shield, Cpu } from 'lucide-react';
 import React, { useState } from 'react';
-import { useAuth } from '../../../utils/AuthContext';
+import { useAuth } from "../utils/AuthContext";
 
 
 const Button = ({ onClick, children }) => <button onClick={onClick}>{children}</button>;

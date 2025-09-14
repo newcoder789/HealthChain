@@ -3,7 +3,6 @@ use ic_cdk_macros::{init, query, update};
 use ic_stable_structures::memory_manager::{self, MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{storable::Bound, DefaultMemoryImpl, StableBTreeMap, Storable};
 use serde::Serialize;
-use serde_bytes::ByteBuf;
 use sha2::{Sha256, Digest};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -17,6 +16,7 @@ struct MedicalRecord {
     owner: Principal,
     file_hash: String,
     file_type: String,
+    file_name: Option<String>,
     timestamp: u64,
     access_list: HashMap<Principal, AccessPermission>,
     parent_folder_id: Option<String>,
@@ -201,20 +201,17 @@ fn register_user(role: UserRole) -> Result<String, String> {
 
     Ok("User registered successfully".to_string())
 }
-
-
 #[update]
-fn upload_record(file_data: ByteBuf, file_type: String, parent_folder_id: Option<String>) -> Result<String, String> {
-    let caller = get_caller();
-    
-    // Role check: Only patients can upload records.
+fn upload_record(file_hash: String, file_type: String, file_name: String, parent_folder_id: Option<String>) -> Result<String, String> {
     let user_profile = get_user_profile()?;
+    let caller = get_caller();// Role check: Only patients can upload records.
     if user_profile.role != UserRole::Patient {
         return Err("Only patients can upload medical records".to_string());
     }
 
-    let record_id = generate_hash(&file_data);
-    let file_hash = record_id.clone();
+    // Use a combination of the file hash and timestamp to create a unique record_id.
+    let record_id_data = format!("{}-{}", file_hash, ic_cdk::api::time());
+    let record_id = generate_hash(record_id_data.as_bytes());
 
     let mut access_list = HashMap::new();
     access_list.insert(caller, AccessPermission {
@@ -230,6 +227,7 @@ fn upload_record(file_data: ByteBuf, file_type: String, parent_folder_id: Option
         owner: caller,
         file_hash,
         file_type,
+        file_name: Some(file_name),
         timestamp: ic_cdk::api::time(),
         access_list,
         parent_folder_id,
@@ -272,6 +270,7 @@ fn create_folder(folder_name: String, parent_folder_id: Option<String>) -> Resul
         timestamp: ic_cdk::api::time(),
         access_list: HashMap::new(),
         parent_folder_id,
+        file_name: Some(folder_name)
     };
 
     RECORDS.with(|records| {
