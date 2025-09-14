@@ -2,10 +2,35 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, FileText, Share2, Eye, Plus, Download, Clock, Shield, Users, Search } from 'lucide-react';
 import AuditLogTable from '../components/AuditLogTable';
+import { useAuth } from '../../../utils/AuthContext';
+import { Hospital_Chain_backend } from "declarations/Hospital_Chain_backend";
+
+
+// This is a placeholder for a real IPFS upload utility.
+const uploadFileToIPFS = async (file) => {
+  return new Promise((resolve, reject) => {
+    console.log(`Simulating IPFS upload for file: ${file.name}`);
+    const cid = `Qm_simulated_ipfs_hash_${Date.now()}`;
+
+    // Simulate a potential failure for testing
+    if (file.name.includes('fail')) {
+      setTimeout(() => reject('Simulated IPFS upload failure.'), 1500);
+    } else {
+      setTimeout(() => {
+        console.log(`Upload complete. CID: ${cid}`);
+        resolve(cid);
+      }, 1500);
+    }
+  });
+};
+
+
 
 const PatientDashboard = () => {
   const [activeTab, setActiveTab] = useState('records');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const { isAuthenticated, authClient, principal, login, logout } = useAuth();  
+  
   
   const mockRecords = [
     {
@@ -356,6 +381,7 @@ const PatientDashboard = () => {
 
             <div className="space-y-4 mb-6">
               <div>
+                
                 <label className="block text-sm font-medium text-gray-300 mb-2">Record Type</label>
                 <select className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white">
                   <option>Lab Report</option>

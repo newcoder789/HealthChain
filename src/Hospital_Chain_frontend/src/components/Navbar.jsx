@@ -1,68 +1,15 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Menu, X, Shield, Cpu } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
-import { AuthClient } from '@dfinity/auth-client';
-import { canisterId } from 'declarations/Hospital_Chain_backend/index.js';
-import { createActor} from 'declarations/Hospital_Chain_backend';
+import React, { useState } from 'react';
+import { useAuth } from '../../../utils/AuthContext';
 
-const network = process.env.DFX_NETWORK;
-const identityProvider =
-  network === 'ic'
-    ? 'https://identity.ic0.app' // Mainnet
-    : 'http://uzt4z-lp777-77774-qaabq-cai.localhost:4943'; // Local
 
-// Reusable button component
 const Button = ({ onClick, children }) => <button onClick={onClick}>{children}</button>;
 
 
 const Navbar = () => {
-  const [state, setState] = useState({
-    actor: undefined,
-    authClient: undefined,
-    isAuthenticated: false,
-    principal: 'Click "Whoami" to see your principal ID'
-  });
-
-  // Initialize auth client
-  useEffect(() => {
-    updateActor();
-  }, []);
-
-  const updateActor = async () => {
-    
-    const authClient = await AuthClient.create();
-    const identity = authClient.getIdentity();
-    console.log('User principal:',
-       identity.getPrincipal().toString());
-
-    const actor = createActor(canisterId, {
-      agentOptions: {
-        identity
-      }
-    });
-    const isAuthenticated = await authClient.isAuthenticated();
-
-    setState((prev) => ({
-      ...prev,
-      actor,
-      authClient,
-      isAuthenticated
-    }));
-  };
-
-  const login = async () => {
-    await state.authClient.login({
-      identityProvider,
-      onSuccess: updateActor
-    })
-  };
-
-  const logout = async () => {
-    await state.authClient.logout();
-    updateActor();
-  };
-
+  const { isAuthenticated, authClient, principal, login, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
 
@@ -85,15 +32,15 @@ const Navbar = () => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {!state.isAuthenticated ? (
+          {!isAuthenticated ? (
             <Button onClick={login}>Login with Internet Identity</Button>
           ) : (
             <Button onClick={logout}>Logout</Button>
           )}
-          {state.authClient && (
+          {authClient && (
             <div>
               <h2>Your principal ID is:</h2>
-              <h4>{state.authClient.getIdentity().getPrincipal().toString()}</h4>
+              <h4>{principal}</h4>
             </div>
           )}  
           {/* Logo */}
