@@ -17,24 +17,29 @@ type MedicalRecord = record {
 };
 type Result = variant { Ok : text; Err : text };
 type Result_1 = variant { Ok : vec MedicalRecord; Err : text };
-type Result_2 = variant { Ok : UserProfile; Err : text };
-type Result_3 = variant { Ok; Err : text };
+type Result_2 = variant { Ok : principal; Err : text };
+type Result_3 = variant { Ok : UserProfile; Err : text };
+type Result_4 = variant { Ok; Err : text };
 type UserProfile = record {
   records : vec text;
-  role : UserRole;
+  name : opt text;
+  role : vec UserRole;
   created_at : nat64;
   user_id : principal;
 };
 type UserRole = variant { Doctor; Researcher; Patient };
 service : () -> {
+  add_user_role : (UserRole) -> (Result);
   create_folder : (text, opt text) -> (Result);
   get_my_records : () -> (Result_1) query;
-  get_profile : () -> (Result_2) query;
-  grant_access : (text, principal, AccessPermission) -> (Result_3);
+  get_principal_by_name : (text) -> (Result_2) query;
+  get_profile : () -> (Result_3) query;
+  grant_access : (text, principal, AccessPermission) -> (Result_4);
   register_user : (UserRole) -> (Result);
-  revoke_access : (text, principal) -> (Result_3);
+  revoke_access : (text, principal) -> (Result_4);
   shared_with_me : () -> (Result_1) query;
-  submit_for_research : (text) -> (Result_3);
-  update_settings : () -> (Result_3);
+  submit_for_research : (text) -> (Result_4);
+  update_settings : () -> (Result_4);
+  update_user_name : (text) -> (Result);
   upload_record : (text, text, text, opt text) -> (Result);
 }

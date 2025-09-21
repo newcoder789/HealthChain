@@ -1,13 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { AuthClient } from '@dfinity/auth-client';
-import { canisterId } from 'declarations/Hospital_Chain_backend/index.js';
+import { canisterId, Hospital_Chain_backend } from 'declarations/Hospital_Chain_backend';
 import { createActor } from 'declarations/Hospital_Chain_backend';
 
 const network = process.env.DFX_NETWORK;
 const identityProvider =
   network === 'ic'
     ? 'https://identity.ic0.app'
-    : 'http://uzt4z-lp777-77774-qaabq-cai.localhost:4943';
+    : 'http://ufxgi-4p777-77774-qaadq-cai.localhost:4943';
 
 const AuthContext = createContext();
 
@@ -17,43 +17,60 @@ export const AuthProvider = ({ children }) => {
     authClient: undefined,
     isAuthenticated: false,
     principal: 'Click "Whoami" to see your principal ID',
+    userRole: null
   });
-  const [userRole, setUserRole] = useState(null);
 
-  const updateActor = useCallback(async () => {
+  // New function to check for auth and set role correctly
+  const checkAuthAndSetRole = useCallback(async () => {
     const authClient = await AuthClient.create();
-    const identity = authClient.getIdentity();
-    const actor = createActor(canisterId, {
-      agentOptions: { identity },
-    });
     const isAuthenticated = await authClient.isAuthenticated();
-    try {
-      const userProfile = await canisterActor.get_profile();
-      if (userProfile.role.Patient) setUserRole('Patient');
-      else if (userProfile.role.Doctor) setUserRole('Doctor');
-      else if (userProfile.role.Researcher) setUserRole('Researcher');
-    } catch (error) {
-      setUserRole("None");
+    let actor = state.actor;
+    let principal = state.principal;
+    let currentRole = null;
+
+    if (isAuthenticated) {
+      const identity = authClient.getIdentity();
+      principal = identity.getPrincipal().toString();
+      actor = createActor(canisterId, { agentOptions: { identity } });
+
+      try {
+        const userProfile = await actor.get_profile();
+        // Fix: userProfile.role is now an array of roles
+        if (userProfile.role.includes('Patient')) currentRole = 'Patient';
+        else if (userProfile.role.includes('Doctor')) currentRole = 'Doctor';
+        else if (userProfile.role.includes('Researcher')) currentRole = 'Researcher';
+        else currentRole = null;
+      } catch (error) {
+        currentRole = null; 
+        try {
+          // Automatically register as a patient.
+          await actor.register_user({ Patient: null });
+          currentRole = 'Patient';
+        } catch (registerError) {
+          console.error("Failed to register user:", registerError);
+          currentRole = null;
+        }
+      }
     }
-    setState((prev) => ({
-      ...prev,
+
+    setState({
       actor,
       authClient,
       isAuthenticated,
-      principal: identity.getPrincipal().toString(),
-      userRole
-    }));
-  }, []);
+      principal,
+      userRole: currentRole,
+    });
+  }, [state.actor, state.principal]);
 
   useEffect(() => {
-    updateActor();
-  }, [updateActor]);
+    checkAuthAndSetRole();
+  }, [checkAuthAndSetRole]);
 
   const login = async () => {
     if (state.authClient) {
       await state.authClient.login({
         identityProvider,
-        onSuccess: updateActor,
+        onSuccess: checkAuthAndSetRole,
       });
     }
   };
@@ -61,19 +78,26 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     if (state.authClient) {
       await state.authClient.logout();
-      updateActor();
+      checkAuthAndSetRole();
+    }
+  };
+
+  // New register function
+  const registerUser = async (role) => {
+    if (state.actor) {
+      await state.actor.register_user({ [role]: null });
+      checkAuthAndSetRole();
     }
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
+    <AuthContext.Provider value={{ ...state, login, logout, registerUser }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => useContext(AuthContext);
-
 
 
 // const handleAuthenticated = async (client) => {

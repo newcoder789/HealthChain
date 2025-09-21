@@ -7,6 +7,8 @@ use sha2::{Sha256, Digest};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::borrow::Cow;
+use ic_cdk::api::time;
+use ic_cdk::api::caller;
 
 // --- Data Structures ---
 
@@ -32,18 +34,18 @@ struct AccessPermission {
 }
 
 // User role enum for multi-role user system
-#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 enum UserRole {
     Patient,
     Doctor,
     Researcher,
 }
 
-// User profile to replace PatientProfile
 #[derive(CandidType, Deserialize, Serialize, Clone)]
 struct UserProfile {
     user_id: Principal,
-    role: UserRole,
+    role: Vec<UserRole>,
+    name: Option<String>, // Added for user identification
     created_at: u64,
     records: Vec<String>,
 }
@@ -68,7 +70,6 @@ impl Storable for MedicalRecord {
     fn into_bytes(self) -> Vec<u8> {
         candid::encode_one(self).expect("Failed to encode MedicalRecord")
     }
-
     const BOUND: Bound = Bound::Unbounded;
 }
 
@@ -80,13 +81,11 @@ impl Storable for AccessPermission {
         candid::decode_one(bytes.as_ref()).expect("Failed to decode AccessPermission")
     }
     fn into_bytes(self) -> Vec<u8> {
-        candid::encode_one(self).expect("Failed to encode MedicalRecord")
+        candid::encode_one(self).expect("Failed to encode AccessPermission")
     }
-
     const BOUND: Bound = Bound::Unbounded;
 }
 
-// Storable for the new UserProfile
 impl Storable for UserProfile {
     fn to_bytes(&self) -> Cow<[u8]> {
         Cow::Owned(candid::encode_one(self).expect("Failed to encode UserProfile"))
@@ -95,7 +94,7 @@ impl Storable for UserProfile {
         candid::decode_one(bytes.as_ref()).expect("Failed to decode UserProfile")
     }
     fn into_bytes(self) -> Vec<u8> {
-        candid::encode_one(self).expect("Failed to encode MedicalRecord")
+        candid::encode_one(self).expect("Failed to encode UserProfile")
     }
     const BOUND: Bound = Bound::Unbounded;
 }
@@ -108,7 +107,7 @@ impl Storable for AuditLog {
         candid::decode_one(bytes.as_ref()).expect("Failed to decode AuditLog")
     }
     fn into_bytes(self) -> Vec<u8> {
-        candid::encode_one(self).expect("Failed to encode MedicalRecord")
+        candid::encode_one(self).expect("Failed to encode AuditLog")
     }
     const BOUND: Bound = Bound::Unbounded;
 }
@@ -121,10 +120,15 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(memory_manager::MemoryManager::init(DefaultMemoryImpl::default()));
 
-    // Changed from PATIENTS to USERS to support all user types
     static USERS: RefCell<StableBTreeMap<Vec<u8>, UserProfile, Memory>> = RefCell::new(
         StableBTreeMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
+        )
+    );
+
+    static USER_NAME_TO_PRINCIPAL: RefCell<StableBTreeMap<String, Principal, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))
         )
     );
 
@@ -152,7 +156,7 @@ fn generate_hash(data: &[u8]) -> String {
 fn get_caller() -> Principal {
     ic_cdk::api::msg_caller()
 }
-// New helper function to enforce user roles
+
 fn get_user_profile() -> Result<UserProfile, String> {
     let caller = get_caller();
     let caller_bytes = caller.as_slice().to_vec();
@@ -190,7 +194,8 @@ fn register_user(role: UserRole) -> Result<String, String> {
 
     let profile = UserProfile {
         user_id: caller,
-        role,
+        role: vec![role],
+        name: None,
         created_at: ic_cdk::api::time(),
         records: vec![],
     };
@@ -201,15 +206,67 @@ fn register_user(role: UserRole) -> Result<String, String> {
 
     Ok("User registered successfully".to_string())
 }
+
+#[update]
+fn update_user_name(name: String) -> Result<String, String> {
+    let caller = get_caller();
+    let caller_bytes = caller.as_slice().to_vec();
+
+    USERS.with(|users| {
+        let mut users_mut = users.borrow_mut();
+        if let Some(mut profile) = users_mut.get(&caller_bytes) {
+
+            if USER_NAME_TO_PRINCIPAL.with(|map| map.borrow().contains_key(&name)) {
+                return Err("This username is already taken".to_string());
+            }
+
+            if let Some(old_name) = profile.name.clone() {
+                USER_NAME_TO_PRINCIPAL.with(|map| map.borrow_mut().remove(&old_name));
+            }
+
+            profile.name = Some(name.clone());
+            users_mut.insert(caller_bytes, profile);
+            USER_NAME_TO_PRINCIPAL.with(|map| map.borrow_mut().insert(name.clone(), caller));
+
+            Ok(format!("User name updated to {}", name))
+        } else {
+            Err("User not found".to_string())
+        }
+    })
+}
+
+#[update]
+fn add_user_role(new_role: UserRole) -> Result<String, String> {
+    let caller = get_caller();
+    let caller_bytes = caller.as_slice().to_vec();
+
+    USERS.with(|users| {
+        let mut users_mut = users.borrow_mut();
+        if let Some(profile) = users_mut.get(&caller_bytes) {
+            let has_role = profile.role.iter().any(|r| r == &new_role);
+            if !has_role {
+                let mut new_profile = profile.clone();
+                new_profile.role.push(new_role);
+                users_mut.insert(caller_bytes, new_profile);
+                Ok("Role added to user".to_string())
+            } else {
+                Err("User already has this role".to_string())
+            }
+        } else {
+            Err("User not found".to_string())
+        }
+    })
+}
+
 #[update]
 fn upload_record(file_hash: String, file_type: String, file_name: String, parent_folder_id: Option<String>) -> Result<String, String> {
+    let caller = get_caller();
     let user_profile = get_user_profile()?;
-    let caller = get_caller();// Role check: Only patients can upload records.
-    if user_profile.role != UserRole::Patient {
+
+    if !user_profile.role.contains(&UserRole::Patient) {
         return Err("Only patients can upload medical records".to_string());
     }
 
-    // Use a combination of the file hash and timestamp to create a unique record_id.
     let record_id_data = format!("{}-{}", file_hash, ic_cdk::api::time());
     let record_id = generate_hash(record_id_data.as_bytes());
 
@@ -252,10 +309,9 @@ fn upload_record(file_hash: String, file_type: String, file_name: String, parent
 #[update]
 fn create_folder(folder_name: String, parent_folder_id: Option<String>) -> Result<String, String> {
     let caller = get_caller();
-    
-    // Role check: Only patients can create folders.
     let user_profile = get_user_profile()?;
-    if user_profile.role != UserRole::Patient {
+
+    if !user_profile.role.contains(&UserRole::Patient) {
         return Err("Only patients can create folders".to_string());
     }
     
@@ -315,16 +371,14 @@ fn revoke_access(record_id: String, to_principal: Principal) -> Result<(), Strin
 #[query]
 fn get_my_records() -> Result<Vec<MedicalRecord>, String> {
     let caller = get_caller();
-    
-    // Role check: Only patients can view their own records.
     let user_profile = get_user_profile()?;
-    if user_profile.role != UserRole::Patient {
+
+    if !user_profile.role.contains(&UserRole::Patient) {
         return Err("Only patients can view their own records".to_string());
     }
 
     let record_ids = USERS.with(|users| {
-        let caller_bytes = caller.as_slice().to_vec();
-        users.borrow().get(&caller_bytes).map(|profile| profile.records.clone()).ok_or("User not found".to_string())
+        users.borrow().get(&caller.as_slice().to_vec()).map(|profile| profile.records.clone()).ok_or("User not found".to_string())
     })?;
 
     let result = RECORDS.with(|records| {
@@ -340,10 +394,9 @@ fn get_my_records() -> Result<Vec<MedicalRecord>, String> {
 #[update]
 fn grant_access(record_id: String, to_principal: Principal, permission: AccessPermission) -> Result<(), String> {
     let caller = get_caller();
-    
-    // Role check: Only patients can grant access to their records.
     let user_profile = get_user_profile()?;
-    if user_profile.role != UserRole::Patient {
+
+    if !user_profile.role.contains(&UserRole::Patient) {
         return Err("Only patients can grant access to records".to_string());
     }
 
@@ -369,10 +422,9 @@ fn grant_access(record_id: String, to_principal: Principal, permission: AccessPe
 #[query]
 fn shared_with_me() -> Result<Vec<MedicalRecord>, String> {
     let caller = get_caller();
-    
-    // Role check: Doctors and researchers can view shared records.
     let user_profile = get_user_profile()?;
-    if user_profile.role == UserRole::Patient {
+
+    if user_profile.role.contains(&UserRole::Patient) {
         return Err("Patients do not have a 'shared with me' view".to_string());
     }
     
@@ -395,10 +447,9 @@ fn shared_with_me() -> Result<Vec<MedicalRecord>, String> {
 #[update]
 fn submit_for_research(record_id: String) -> Result<(), String> {
     let caller = get_caller();
-    
-    // Role check: Only patients can submit records for research.
     let user_profile = get_user_profile()?;
-    if user_profile.role != UserRole::Patient {
+
+    if !user_profile.role.contains(&UserRole::Patient) {
         return Err("Only patients can submit records for research".to_string());
     }
 
@@ -430,6 +481,13 @@ fn get_profile() -> Result<UserProfile, String> {
     let caller_bytes = caller.as_slice().to_vec();
     USERS.with(|users| {
         users.borrow().get(&caller_bytes).ok_or("User not found".to_string())
+    })
+}
+
+#[query]
+fn get_principal_by_name(name: String) -> Result<Principal, String> {
+    USER_NAME_TO_PRINCIPAL.with(|map| {
+        map.borrow().get(&name).ok_or("User not found".to_string())
     })
 }
 
