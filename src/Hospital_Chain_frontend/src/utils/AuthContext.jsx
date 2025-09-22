@@ -7,7 +7,7 @@ const network = process.env.DFX_NETWORK;
 const identityProvider =
   network === 'ic'
     ? 'https://identity.ic0.app'
-    : 'http://ufxgi-4p777-77774-qaadq-cai.localhost:4943';
+    : 'http://uzt4z-lp777-77774-qaabq-cai.localhost:4943';
 
 const AuthContext = createContext();
 

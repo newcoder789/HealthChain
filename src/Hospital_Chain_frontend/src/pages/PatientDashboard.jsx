@@ -372,7 +372,7 @@ const PatientDashboard = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          {activeTab === 'records' && (
+          {activeTab === 'records' && ( 
             <div>
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center space-x-4">
@@ -420,14 +420,15 @@ const PatientDashboard = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.5, delay: index * 0.1 }}
                     className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 hover:border-blue-300/40 transition-all duration-200 shadow-lg"
-onClick={() => {
-  if (record.file_type === 'folder') {
-    setCurrentFolder(record);
-    filterRecords(record.record_id);
-  } else {
-    handleView(record.file_hash);
-  }
-}}
+                    onClick={() => {
+                      console.log("record folder we just opened", record)
+                      if (record.file_type === 'folder') {
+                        setCurrentFolder(record);
+                        filterRecords(record.record_id);
+                      } else {
+                        handleView(record.file_hash);
+                      }
+                    }}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
