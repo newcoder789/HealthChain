@@ -1,10 +1,30 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Stethoscope, Users, FileText, Activity, Search, Bell, Clock, Eye, TrendingUp } from 'lucide-react';
+import { Stethoscope, Users, FileText, Activity, Search, Bell, Clock, Eye, TrendingUp, BadgeCheck, Upload } from 'lucide-react';
 import AuditLogTable from '../components/AuditLogTable';
+import { useAuth } from '../utils/AuthContext';
+import { useDemo } from '../utils/DemoContext';
+import { Protect } from '../components/DeveloperOverlay';
 
 const DoctorDashboard = () => {
   const [activeTab, setActiveTab] = useState('patients');
+  const { actor } = useAuth();
+  const { demoMode } = useDemo();
+  const [verification, setVerification] = useState({ status: 'pending' });
+  const [searchName, setSearchName] = useState('');
+  const [patientResult, setPatientResult] = useState(null);
+  const [evidenceFile, setEvidenceFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    // fetch profile badge if available
+    (async () => {
+      try {
+        const prof = await actor.get_profile();
+        if (prof && prof.doctor_badge) setVerification({ status: 'approved', ...prof.doctor_badge });
+      } catch (e) {}
+    })();
+  }, [actor]);
 
   const mockPatients = [
     {
@@ -76,6 +96,10 @@ const DoctorDashboard = () => {
         >
           <h1 className="text-4xl font-bold gradient-text mb-4">Doctor Dashboard</h1>
           <p className="text-xl text-gray-300">Access patient records and manage healthcare data</p>
+          <div className="mt-3 flex items-center gap-3 text-sm">
+            <BadgeCheck className={`h-5 w-5 ${verification.status==='approved' ? 'text-emerald-400' : 'text-yellow-400'}`} />
+            <span>{verification.status==='approved' ? 'Verified Doctor' : 'Verification pending'}</span>
+          </div>
         </motion.div>
 
         {/* Stats Cards */}
@@ -178,11 +202,28 @@ const DoctorDashboard = () => {
                     <input
                       type="text"
                       placeholder="Search patients..."
+                      value={searchName}
+                      onChange={(e)=>setSearchName(e.target.value)}
                       className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-secondary-400"
                     />
                   </div>
+                  <Protect level="green" label="Search (mock ok)">
+                    <button onClick={async ()=>{
+                      setBusy(true);
+                      try { const res = await actor.get_principal_by_name(searchName); setPatientResult(res); } catch(e) { setPatientResult(null);} finally { setBusy(false); }
+                    }} disabled={busy || !searchName} className="px-4 py-2 bg-secondary-600 text-white rounded disabled:opacity-50">{busy ? 'Searching...' : 'Lookup'}</button>
+                  </Protect>
                 </div>
               </div>
+
+              {patientResult && (
+                <div className="glass-card p-4 rounded-xl border border-white/20 mb-4 flex items-center justify-between">
+                  <div className="text-white text-sm">Found: {searchName}</div>
+                  <Protect level="green" label="Access request (demo)">
+                    <button onClick={()=> alert('Access request sent (demo)')} className="px-3 py-1 bg-indigo-600 text-white rounded">Request Access</button>
+                  </Protect>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-4">
                 {mockPatients.map((patient, index) => (
@@ -265,10 +306,11 @@ const DoctorDashboard = () => {
                         <p className="text-sm font-medium text-white">Vital Signs</p>
                         <p className="text-xs text-gray-400">Latest: Jan 8, 2025</p>
                       </div>
-                      <div className="bg-gray-800/50 p-4 rounded-lg">
+                      <div className="bg-gray-800/50 p-4 rounded-lg select-none" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0, rgba(255,255,255,0.04) 10px, transparent 10px, transparent 20px)' }}>
                         <Stethoscope className="h-6 w-6 text-accent-400 mb-2" />
                         <p className="text-sm font-medium text-white">Clinical Notes</p>
                         <p className="text-xs text-gray-400">Latest: Jan 5, 2025</p>
+                        <div className="mt-2 text-[10px] text-gray-500 italic">Watermark: Dr. Sarah Smith | {new Date().toLocaleString()}</div>
                       </div>
                     </div>
                   </motion.div>
@@ -346,6 +388,31 @@ const DoctorDashboard = () => {
                 <p className="text-gray-400">Track all interactions with patient records for compliance</p>
               </div>
               <AuditLogTable />
+            </div>
+          )}
+          {activeTab === 'analytics' && (
+            <div className="glass-card p-6 rounded-xl border border-white/20 mb-8">
+              <h3 className="text-lg font-semibold text-white mb-4">Doctor Verification</h3>
+              <div className="flex items-center gap-3 mb-3 text-sm text-gray-300">
+                <BadgeCheck className={`h-5 w-5 ${verification.status==='approved' ? 'text-emerald-400' : 'text-yellow-400'}`} />
+                <span>{verification.status==='approved' ? 'Verified' : 'Not verified'}</span>
+              </div>
+              <Protect level="green" label="Verification (demo)">
+                <div className="flex items-center gap-3">
+                  <input type="file" onChange={(e)=>setEvidenceFile(e.target.files?.[0])} className="text-sm" />
+                  <button onClick={async ()=>{
+                    if (!evidenceFile) return alert('Please select a file');
+                    setBusy(true);
+                    try {
+                      if (!demoMode) {
+                        await actor.request_doctor_verification('demo_evidence_cid');
+                      }
+                      setVerification({ status: 'pending' });
+                      alert('Verification evidence submitted (demo)');
+                    } finally { setBusy(false); }
+                  }} disabled={busy} className="inline-flex items-center px-3 py-1 bg-indigo-600 text-white rounded disabled:opacity-50"><Upload className="h-4 w-4 mr-1"/>{busy ? 'Submitting...' : 'Submit Evidence'}</button>
+                </div>
+              </Protect>
             </div>
           )}
         </motion.div>

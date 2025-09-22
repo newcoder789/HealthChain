@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, CheckCircle, Folder, File, FileText, FileImage, Download, ArrowLeft, SortAsc, SortDesc, Share2, Clock, Eye, Plus, Users, Shield } from 'lucide-react';
 import { useAuth } from '../utils/AuthContext';
+import { useDemo } from '../utils/DemoContext';
+import { TokenService } from '../utils/TokenService';
+import { Protect } from '../components/DeveloperOverlay';
 import { uploadFileToIPFS, getIPFSFile, unpinFileFromIPFS } from '../utils/IPFSHandler';
 import { Toast } from '../components/Toast';
 
@@ -21,6 +24,11 @@ const PatientDashboard = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedRecordToShare, setSelectedRecordToShare] = useState(null);
   const [sortedRecords, setSortedRecords] = useState([]);
+  const { demoMode } = useDemo();
+  const [displayName, setDisplayName] = useState('Aryan Dixit');
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [bounties, setBounties] = useState([]);
+  const [consented, setConsented] = useState({});
 
   const handleToast = (message, type) => {
     setToast({ message, type });
@@ -67,6 +75,13 @@ const PatientDashboard = () => {
       // Add Patient role if not present
       console.log("Actor hai bhski", actor)
       fetchRecords();
+      try {
+        const b = TokenService.getBounties();
+        setBounties(b);
+      } catch (e) {}
+      try {
+        setWalletBalance(TokenService.getBalance(displayName));
+      } catch (e) {}
     }
   }, [isAuthenticated, actor]);
 
@@ -150,6 +165,20 @@ const PatientDashboard = () => {
       default:
         return <File className="h-6 w-6 text-gray-500" />;
     }
+  };
+
+  const handleConsent = (bountyId) => {
+    try {
+      TokenService.consentToBounty(bountyId, displayName);
+      setConsented(prev => ({ ...prev, [bountyId]: true }));
+    } catch (e) {}
+  };
+
+  const handleRevoke = (bountyId) => {
+    try {
+      TokenService.revokeConsent(bountyId, displayName);
+      setConsented(prev => ({ ...prev, [bountyId]: false }));
+    } catch (e) {}
   };
 
   const sortRecords = (records) => {
@@ -291,6 +320,21 @@ const PatientDashboard = () => {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5 }}
+            className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/60 to-indigo-800/60 shadow-lg md:col-span-2"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">Profile</p>
+                <p className="text-2xl font-bold text-white">{displayName}</p>
+                <p className="text-sm text-blue-300">Role: {userRole || 'Patient'}</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500"></div>
+            </div>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
             className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/60 to-indigo-800/60 shadow-lg"
           >
             <div className="flex items-center justify-between">
@@ -346,6 +390,44 @@ const PatientDashboard = () => {
               <Upload className="h-8 w-8 text-neon-400" />
             </div>
           </motion.div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.35 }}
+            className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/60 to-indigo-800/60 shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">HCT Balance</p>
+                <p className="text-2xl font-bold text-white">{walletBalance} HCT</p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-200 mb-4">Bounties Available</h2>
+          <div className="grid grid-cols-1 gap-4">
+            {bounties.map((b) => (
+              <div key={b.id} className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg flex items-center justify-between">
+                <div>
+                  <div className="text-white font-semibold">{b.title}</div>
+                  <div className="text-sm text-gray-400">Budget: {b.budget} HCT</div>
+                  <div className="text-xs text-gray-500">Tags: {(b.tags||[]).join(', ')}</div>
+                </div>
+                <div className="flex gap-2">
+                  {!consented[b.id] ? (
+                    <button onClick={() => handleConsent(b.id)} className="px-4 py-2 bg-emerald-600 text-white rounded">Consent</button>
+                  ) : (
+                    <button onClick={() => handleRevoke(b.id)} className="px-4 py-2 bg-rose-600 text-white rounded">Revoke</button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {bounties.length === 0 && (
+              <div className="text-gray-400">No bounties at the moment.</div>
+            )}
+          </div>
         </div>
 
         <div className="border-b border-white/10 mb-8">
@@ -396,6 +478,7 @@ const PatientDashboard = () => {
                   <button onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} className="bg-gray-800 border border-gray-600 text-white p-2 rounded-lg">
                     {sortOrder === 'asc' ? <SortAsc size={16} /> : <SortDesc size={16} />}
                   </button>
+                  <Protect level="red" label="Upload (protected)">
                   <button
                     onClick={() => setShowUploadModal(true)}
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-xl shadow-md hover:from-blue-500 hover:to-indigo-600 transition-all duration-200"
@@ -403,6 +486,8 @@ const PatientDashboard = () => {
                     <Plus className="h-4 w-4 mr-2" />
                     Upload Record
                   </button>
+                  </Protect>
+                  <Protect level="red" label="Folder (protected)">
                   <button
                     onClick={() => setShowFolderModal(true)}
                     className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-indigo-400 to-blue-500 text-white font-semibold rounded-xl shadow-md hover:from-blue-500 hover:to-indigo-600 transition-all duration-200"
@@ -410,6 +495,7 @@ const PatientDashboard = () => {
                     <Plus className="h-4 w-4 mr-2" />
                     New Folder
                   </button>
+                  </Protect>
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4">

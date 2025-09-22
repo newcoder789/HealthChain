@@ -1,10 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Microscope, Database, BarChart3, Download, Search, Filter, Globe, Shield, Users, TrendingUp } from 'lucide-react';
+import { Microscope, Database, BarChart3, Download, Search, Filter, Globe, Shield, Users, TrendingUp, Coins } from 'lucide-react';
 import AuditLogTable from '../components/AuditLogTable';
+import { TokenService } from '../utils/TokenService';
+import { useDemo } from '../utils/DemoContext';
+import { Protect } from '../components/DeveloperOverlay';
 
 const ResearcherDashboard = () => {
   const [activeTab, setActiveTab] = useState('datasets');
+  const { demoMode } = useDemo();
+  const [bounties, setBounties] = useState([]);
+  const [form, setForm] = useState({ title: '', description: '', tags: '', budget: 0 });
+  const [selectedBounty, setSelectedBounty] = useState(null);
+  const [datasetCid, setDatasetCid] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(()=>{
+    try { setBounties(TokenService.getBounties()); } catch(e) {}
+  },[]);
 
   const mockDatasets = [
     {
@@ -257,10 +270,12 @@ const ResearcherDashboard = () => {
             <div>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-white">Research Projects</h2>
+                <Protect level="green" label="Bounty (mock)">
                 <button className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200">
                   <Microscope className="h-4 w-4 mr-2" />
                   New Project
                 </button>
+                </Protect>
               </div>
 
               <div className="space-y-6">
@@ -325,9 +340,69 @@ const ResearcherDashboard = () => {
 
           {activeTab === 'insights' && (
             <div>
-              <h2 className="text-2xl font-bold text-white mb-6">Research Insights</h2>
+              <h2 className="text-2xl font-bold text-white mb-6">Research Marketplace (Demo)</h2>
+
+              <div className="glass-card p-6 rounded-xl border border-white/20 mb-6">
+                <h3 className="text-lg font-semibold text-white mb-3">Create Bounty</h3>
+                <div className="grid md:grid-cols-4 gap-3">
+                  <input className="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Title" value={form.title} onChange={e=>setForm({...form,title:e.target.value})} />
+                  <input className="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Description" value={form.description} onChange={e=>setForm({...form,description:e.target.value})} />
+                  <input className="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Tags (comma)" value={form.tags} onChange={e=>setForm({...form,tags:e.target.value})} />
+                  <input className="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white" placeholder="Budget (HCT)" type="number" value={form.budget} onChange={e=>setForm({...form,budget:Number(e.target.value)||0})} />
+                </div>
+                <div className="mt-3">
+                  <Protect level="green" label="Create (mock)">
+                    <button onClick={()=>{
+                      if (!form.title || !form.budget) { alert('Enter title and budget'); return; }
+                      setBusy(true);
+                      try {
+                        const id = TokenService.createBounty({ title: form.title, description: form.description, tags: (form.tags||'').split(',').map(t=>t.trim()).filter(Boolean), budget: Number(form.budget)||0 });
+                        TokenService.depositToEscrow(id, Number(form.budget)||0);
+                        setBounties(TokenService.getBounties());
+                        alert('Bounty created and funded (demo)');
+                        setForm({ title: '', description: '', tags: '', budget: 0 });
+                      } finally { setBusy(false); }
+                    }} disabled={busy} className="px-4 py-2 bg-indigo-600 text-white rounded inline-flex items-center disabled:opacity-50"><Coins className="h-4 w-4 mr-1"/>{busy ? 'Processing...' : 'Create & Fund'}</button>
+                  </Protect>
+                </div>
+              </div>
+
+              <div className="glass-card p-6 rounded-xl border border-white/20 mb-6">
+                <h3 className="text-lg font-semibold text-white mb-3">Open Bounties</h3>
+                <div className="space-y-3">
+                  {bounties.map(b=> (
+                    <div key={b.id} className="flex items-center justify-between border border-white/10 rounded p-3">
+                      <div className="text-white text-sm">
+                        <div className="font-medium">{b.title}</div>
+                        <div className="text-xs text-gray-400">Budget: {b.budget} HCT • Participants: {(b.participants||[]).length}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={()=> setSelectedBounty(b)} className="px-3 py-1 bg-gray-700 text-white rounded">Compile Dataset</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {selectedBounty && (
+                <div className="glass-card p-6 rounded-xl border border-white/20">
+                  <h3 className="text-lg font-semibold text-white mb-3">Compile Dataset for: {selectedBounty.title}</h3>
+                  <div className="text-sm text-gray-300 mb-3">Simulating anonymization and bundling consenting patient records...</div>
+                  <Protect level="green" label="Compile (mock)">
+                    <button onClick={()=> { setDatasetCid(`bafy-demo-${Date.now()}`); alert('Dataset compiled (demo)'); }} className="px-3 py-1 bg-emerald-600 text-white rounded">Run Compile</button>
+                  </Protect>
+                  {datasetCid && (
+                    <div className="mt-3 text-sm text-gray-200">Dataset CID: {datasetCid}</div>
+                  )}
+                  <div className="mt-3">
+                    <Protect level="green" label="Distribute (mock)">
+                      <button onClick={()=>{ TokenService.distributeBounty(selectedBounty.id); alert('Tokens distributed to participants (demo)'); }} className="px-3 py-1 bg-indigo-600 text-white rounded inline-flex items-center"><Coins className="h-4 w-4 mr-1"/>Distribute Tokens</button>
+                    </Protect>
+                  </div>
+                </div>
+              )}
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 mt-8">
                 <div className="glass-card p-6 rounded-xl border border-white/20">
                   <h3 className="text-lg font-semibold text-white mb-4">Global Health Trends</h3>
                   <div className="space-y-4">

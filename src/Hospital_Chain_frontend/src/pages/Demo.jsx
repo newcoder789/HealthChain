@@ -59,21 +59,7 @@ const Demo = () => {
             how HealthChain transforms medical records through decentralization.
           </p>
 
-          {/* Theme Toggle */}
-          <div className="flex items-center justify-center space-x-4 mb-12">
-            <span className="text-gray-300">Theme:</span>
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className={`flex items-center px-4 py-2 rounded-lg transition-all duration-200 ${
-                darkMode 
-                  ? 'bg-gray-800 text-gray-300' 
-                  : 'bg-white text-gray-800'
-              }`}
-            >
-              {darkMode ? <Moon className="h-4 w-4 mr-2" /> : <Sun className="h-4 w-4 mr-2" />}
-              {darkMode ? 'Dark' : 'Light'}
-            </button>
-          </div>
+          {/* Theme Toggle removed for demo stability */}
         </motion.div>
 
         {/* Role Selection */}

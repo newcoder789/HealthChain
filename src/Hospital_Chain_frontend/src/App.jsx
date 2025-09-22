@@ -12,6 +12,10 @@ import DoctorDashboard from './pages/DoctorDashboard';
 import ResearcherDashboard from './pages/ResearcherDashboard';
 import NotFound from './pages/NotFound';
 import './index.scss';
+import AdminPortal from './pages/AdminPortal';
+import DeveloperOverlayBanner from './components/DeveloperOverlay';
+import JudgeTour from './components/JudgeTour';
+import { DemoProvider } from './utils/DemoContext';
 import { useAuth } from './utils/AuthContext';
 import React, { useEffect } from 'react';
 
@@ -47,6 +51,7 @@ function AppRouter() {
         <Route path="/dashboard/patient" element={<PatientDashboard />} />
         <Route path="/dashboard/doctor" element={<DoctorDashboard />} />
         <Route path="/dashboard/researcher" element={<ResearcherDashboard />} />
+        <Route path="/admin" element={<AdminPortal />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />
@@ -57,9 +62,13 @@ function AppRouter() {
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-        <AppRouter />
-      </div>
+      <DemoProvider>
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+          <AppRouter />
+          <DeveloperOverlayBanner />
+          <JudgeTour />
+        </div>
+      </DemoProvider>
     </Router>
   );
 }
