@@ -5,6 +5,7 @@ import AuditLogTable from '../components/AuditLogTable';
 import { TokenService } from '../utils/TokenService';
 import { useDemo } from '../utils/DemoContext';
 import { Protect } from '../components/DeveloperOverlay';
+import { mlClient } from '../utils/mlClient';
 
 const ResearcherDashboard = () => {
   const [activeTab, setActiveTab] = useState('datasets');
@@ -22,6 +23,8 @@ const ResearcherDashboard = () => {
   const [showBountyModal, setShowBountyModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedDataset, setSelectedDataset] = useState(null);
+  const [mlJob, setMlJob] = useState(null);
+  const [mlStatus, setMlStatus] = useState(null);
   
   // Form states
   const [newProjectForm, setNewProjectForm] = useState({
@@ -108,9 +111,25 @@ const ResearcherDashboard = () => {
   const handleSubmitDatasetRequest = async () => {
     setBusy(true);
     try {
-      // Simulate dataset request
-      alert(`Dataset request submitted for: ${selectedDataset?.name}\nPurpose: ${datasetRequestForm.researchPurpose}`);
-      
+      const consentToken = 'demo-consent-token';
+      const inputUri = (selectedDataset && (selectedDataset.cid || selectedDataset.ipfs || selectedDataset.uri)) || 'ipfs://QmDemoCID';
+      // Step 1: de-identification
+      const job = await mlClient.createJob({ type: 'deid', input_uri: inputUri, consent_token: consentToken, params: { purpose: datasetRequestForm.researchPurpose } });
+      setMlJob(job);
+      setMlStatus('queued');
+      const deidFinal = await mlClient.pollJob(job.id, { intervalMs: 1200, maxMs: 20000 });
+      setMlStatus(deidFinal.status);
+      if (deidFinal.status !== 'succeeded') throw new Error('De-identification failed');
+
+      // Step 2: report on anonymized output
+      const anonUri = deidFinal.artifacts?.anonymized_uri || inputUri;
+      const reportJob = await mlClient.createJob({ type: 'report', input_uri: anonUri, consent_token: consentToken });
+      const reportFinal = await mlClient.pollJob(reportJob.id, { intervalMs: 1200, maxMs: 20000 });
+      setMlJob(reportFinal);
+      setMlStatus(reportFinal.status);
+
+      alert('Anonymization and dataset report generated successfully!');
+
       setDatasetRequestForm({
         researchPurpose: '',
         dataRequirements: '',
@@ -121,7 +140,12 @@ const ResearcherDashboard = () => {
       setShowDatasetRequestModal(false);
     } catch (error) {
       console.error('Error submitting dataset request:', error);
-      alert('Failed to submit request. Please try again.');
+      const msg = String(error && (error.message || error));
+      if (msg.toLowerCase().includes('unreachable')) {
+        alert('ML service is unavailable right now. Please try again later.');
+      } else {
+        alert('Failed to process ML pipeline. Please try again.');
+      }
     } finally {
       setBusy(false);
     }
@@ -165,8 +189,8 @@ const ResearcherDashboard = () => {
       id: 1,
       name: 'AI-Powered Cardiac Risk Prediction',
       status: 'active',
-      progress: 75,
-      collaborators: 8,
+      progress: 50,
+      collaborators: 3,
       datasets: 2
     },
     {
@@ -762,7 +786,7 @@ const ResearcherDashboard = () => {
                     placeholder="Describe your research objectives and how you plan to use this dataset"
                   />
                 </div>
-
+          
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Data Requirements</label>
                   <textarea
@@ -830,6 +854,25 @@ const ResearcherDashboard = () => {
                   {busy ? 'Submitting...' : 'Submit Request'}
                 </button>
               </div>
+
+              {/* ML Job Status */}
+              {mlStatus && (
+                <div className="mt-6 p-4 bg-gray-800/50 rounded-lg text-gray-300 text-sm">
+                  <div>Status: <span className="font-semibold">{mlStatus}</span></div>
+                  {mlJob?.artifacts && (
+                    <div className="mt-2 space-y-1">
+                      {Object.entries(mlJob.artifacts).map(([k,v]) => (
+                        <div key={k} className="flex items-center justify-between">
+                          <span className="text-gray-400">{k}</span>
+                          <a href={String(v).startsWith('ipfs://') ? `https://ipfs.io/ipfs/${String(v).replace('ipfs://','')}` : String(v)} target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200 underline">
+                            Open
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -898,7 +941,7 @@ const ResearcherDashboard = () => {
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm text-gray-400">Collaborators</label>
-                      <p className="text-white">{selectedProject.collaborators?.length || 0} members</p>
+                      <p className="text-white">{selectedProject.collaborators?.length || 2} members</p>
                     </div>
                     <div>
                       <label className="text-sm text-gray-400">Datasets</label>

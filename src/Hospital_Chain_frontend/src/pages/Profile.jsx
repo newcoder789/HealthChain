@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Mail, Shield, Key, Settings, Edit3, Save, X, Eye, EyeOff, Bell, Lock, Globe, Database, Activity } from 'lucide-react';
+import { User, Mail, Shield, Key, Settings, Edit3, Save, X, Eye, EyeOff, Bell, Lock, Globe, Database, Activity, Server } from 'lucide-react';
+import { mlClient } from '../utils/mlClient';
 import { useAuth } from '../utils/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -35,6 +36,15 @@ const Profile = () => {
     dataSharing: 'consent-based',
     analytics: true
   });
+  const [mlUrl, setMlUrl] = useState('');
+  const [mlHealth, setMlHealth] = useState(null);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('ml_gateway_url');
+      if (saved) setMlUrl(saved);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -91,6 +101,21 @@ const Profile = () => {
       console.error('Error updating profile:', error);
       alert('Failed to update profile. Please try again.');
     }
+  };
+
+  const handleSaveMl = async () => {
+    try {
+      window.localStorage.setItem('ml_gateway_url', mlUrl.trim());
+      setMlHealth(null);
+      alert('ML gateway URL saved');
+    } catch (e) {
+      alert('Failed to save ML URL');
+    }
+  };
+
+  const handleTestMl = async () => {
+    const res = await mlClient.health();
+    setMlHealth(res.ok ? res.data : { ok: false });
   };
 
   const handleCancel = () => {
@@ -353,6 +378,47 @@ const Profile = () => {
                       <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
+                </div>
+              </div>
+
+              {/* ML Settings */}
+              <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
+                <h3 className="text-xl font-semibold text-white mb-6 flex items-center"><Server className="h-5 w-5 mr-2" /> ML Settings</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Gateway URL</label>
+                    <input
+                      type="text"
+                      value={mlUrl}
+                      onChange={(e) => setMlUrl(e.target.value)}
+                      placeholder="http://localhost:8001"
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                    />
+                    <p className="text-gray-400 text-xs mt-1">Overrides ML_GATEWAY_URL. Stored in your browser only.</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleSaveMl}
+                      className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={handleTestMl}
+                      className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+                    >
+                      Test Connection
+                    </button>
+                  </div>
+                  {mlHealth && (
+                    <div className="mt-2 text-sm text-gray-300">
+                      {mlHealth.ok === false ? (
+                        <span className="text-red-400">Connection failed</span>
+                      ) : (
+                        <span className="text-emerald-400">OK</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
