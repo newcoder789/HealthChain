@@ -3,12 +3,13 @@ use ic_cdk_macros::{init, query, update};
 use ic_stable_structures::memory_manager::{self, MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{storable::Bound, DefaultMemoryImpl, StableBTreeMap, Storable};
 use serde::Serialize;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::borrow::Cow;
 use ic_cdk::api::time;
 use ic_cdk::api::msg_caller;
+
 // --- Data Structures ---
 
 // ---Medical Records & Metadata ---
@@ -16,7 +17,7 @@ type AccessList = HashMap<Principal, AccessPermission>;
 #[derive(CandidType, Deserialize, Serialize, Clone)]
 pub struct MedicalRecord {
     record_id: String,
-    owner: String,
+    owner: Principal,
     file_cid: String,
     file_name: Option<String>,
     file_type: String,
@@ -72,7 +73,7 @@ pub struct EncryptedKeyForPrincipal {
 struct AccessPermission {
     can_view: bool,
     can_edit: bool,
-    can_share: bool,
+    can_share: bool,    
     is_anonymized: bool,
     expiry: Option<u64>,
 }
@@ -82,29 +83,28 @@ struct AccessPermission {
 pub enum UserRole { Patient, Doctor, Researcher, Admin }
 
 
-
-#[derive(CandidType, Deserialize, Serialize, Clone)]
+#[derive(CandidType, Deserialize, Serialize, Clone, Default)]
 pub struct User {
-    user_id: Principal,
-    name: Option<String>, 
+    user_id: Option<Principal>,
+    name: Option<String>,
     created_at: u64,
     records: Vec<String>,
     principal_text: String,
     email_hash: Option<String>,
-    roles: Vec<UserRole>,                   // Patient, Doctor, Researcher, Admin
-    verified_tier: VerifiedTier,            // Basic or Verified
-    nationality: Option<String>,            // optional verified field
+    roles: Vec<UserRole>,
+    verified_tier: VerifiedTier,
+    nationality: Option<String>,
     proof_of_identity: Option<VerificationEvidence>,
-    identity_status: IdentityStatus,        // Pending/Approved/Rejected/Expired
+    identity_status: IdentityStatus,
     profile: Option<UserProfile>,
     verification_badge: Option<VerificationBadge>,
     records_index: Vec<String>,
     research_submissions: Vec<String>,
-    public_stats: Option<PublicStats>,      // summary counts visible if consented
+    public_stats: Option<PublicStats>,
     reward_multiplier: f32,
     settings: PrivacySettings,
     tokens: TokenBalance,
-    audit_pointer: Vec<u64>,                 // log IDs for quick lookup
+    audit_pointer: Vec<u64>,
 }
 
 #[derive(CandidType, Deserialize, Serialize, Clone)]
@@ -123,13 +123,63 @@ pub struct AuditLogEntry {
 #[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 enum VerifiedTier { Basic, Verified }
 
+// Manually implement Default for VerifiedTier
+impl Default for VerifiedTier {
+    fn default() -> Self {
+        VerifiedTier::Basic
+    }
+}
+
 #[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 enum IdentityStatus { Pending, Approved, Rejected, Expired }
 
-#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
-struct PrivacySettings{
-
+// Manually implement Default for IdentityStatus
+impl Default for IdentityStatus {
+    fn default() -> Self {
+        IdentityStatus::Pending
+    }
 }
+
+
+#[derive(CandidType, Deserialize, Serialize, Clone, Default)]
+pub struct PrivacySettings {
+    /// Whether the user consents to share de-identified data for research.
+    pub allow_research_use: bool,
+
+    /// Whether the user’s public stats (record counts, tags, region) are visible.
+    pub show_public_stats: bool,
+
+    /// Default sharing level for new uploads.
+    /// "Private" = only owner, "TrustedDoctors" = doctors with badges,
+    /// "PublicAnonymized" = anyone with anonymization applied.
+    pub default_sharing_scope: Option<SharingScope>,
+
+    /// Require explicit approval before a doctor/researcher can request access.
+    pub require_manual_approval: bool,
+
+    /// Whether watermarking is applied to all read-only views.
+    pub watermark_on_view: bool,
+
+    /// Timestamp after which unused consents or access grants should auto-expire.
+    pub auto_expire_days: Option<u32>,
+
+    /// Whether to notify the user whenever their record is accessed.
+    pub notify_on_access: bool,
+
+    /// Regions/countries to which data transfer is allowed (e.g., comply with DPDPA cross-border rules).
+    pub allowed_data_regions: Vec<String>,
+
+    /// Optional metadata for future extensions or hospital-specific policies.
+    pub custom_prefs: Option<HashMap<String, String>>,
+}
+
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+pub enum SharingScope {
+    Private,
+    TrustedDoctors,
+    PublicAnonymized,
+}
+
 
 #[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 struct VerificationBadge {
@@ -141,12 +191,12 @@ struct VerificationBadge {
     badge_signature: Option<Vec<u8>>,
 }
 
-#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
 struct TokenBalance{
-    
+
 }
 
-#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
 struct PublicStats {
     record_count: u32,
     tags: Vec<String>,
@@ -155,7 +205,7 @@ struct PublicStats {
     visible: bool,
 }
 
-#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug, Default)]
 struct UserProfile {
     avatar_cid: Option<String>,
     bio: Option<String>,
@@ -165,10 +215,18 @@ struct UserProfile {
 #[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 struct VerificationEvidence { evidence_cid: String, uploaded_at: u64 }
 
+// Manually implement Default for VerificationEvidence
+impl Default for VerificationEvidence {
+    fn default() -> Self {
+        Self {
+            evidence_cid: "".to_string(),
+            uploaded_at: 0,
+        }
+    }
+}
 
 
-
-// 6--- Research Marketplace, Consent & Tokenomics ---
+#[derive(CandidType, Deserialize, Serialize, Clone, Default)]
 pub struct Consent {
     consent_id: String,
     owner_principal: String,
@@ -180,7 +238,7 @@ pub struct Consent {
     consent_evidence_cid: Option<String>,
     revoked_at: Option<u64>,
 }
-
+#[derive(CandidType, Deserialize, Serialize, Clone, Default)]
 pub struct ResearchSubmission {
     submission_id: String,
     owner: String,
@@ -204,7 +262,6 @@ impl Storable for MedicalRecord {
         candid::encode_one(self).expect("Failed to encode MedicalRecord")
     }
     const BOUND: Bound = Bound::Unbounded;
-
 }
 
 impl Storable for AccessPermission {
@@ -214,6 +271,7 @@ impl Storable for AccessPermission {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         candid::decode_one(bytes.as_ref()).expect("Failed to decode AccessPermission")
     }
+    
     fn into_bytes(self) -> Vec<u8> {
         candid::encode_one(self).expect("Failed to encode AccessPermission")
     }
@@ -227,6 +285,7 @@ impl Storable for User {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         candid::decode_one(bytes.as_ref()).expect("Failed to decode User")
     }
+    
     fn into_bytes(self) -> Vec<u8> {
         candid::encode_one(self).expect("Failed to encode User")
     }
@@ -240,6 +299,7 @@ impl Storable for AuditLogEntry {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         candid::decode_one(bytes.as_ref()).expect("Failed to decode AuditLogEntry")
     }
+    
     fn into_bytes(self) -> Vec<u8> {
         candid::encode_one(self).expect("Failed to encode AuditLogEntry")
     }
@@ -291,23 +351,27 @@ fn get_caller() -> Principal {
     msg_caller()
 }
 
-fn get_user_profile() -> Result<User, String> {
+fn get_user_profile() -> Option<User> {
     let caller = get_caller();
     let caller_bytes = caller.as_slice().to_vec();
     USERS.with(|users| {
-        users.borrow().get(&caller_bytes).ok_or("User not registered".to_string())
+        users.borrow().get(&caller_bytes)
     })
 }
 
-fn log_action(record_id: String, action: String) {
+fn log_action(record_id: Option<String>, action: String, target: Option<String>, meta_cid: Option<String>){
+    let timestamp = ic_cdk::api::time();
     let log = AuditLogEntry {
-        record_id,
+        id: timestamp,
         actor: get_caller().to_string(),
         action,
-        timestamp: ic_cdk::api::time(),
+        record_id,
+        target,
+        meta_cid,
+        timestamp,
     };
     AUDIT_LOGS.with(|logs| {
-        logs.borrow_mut().insert(ic_cdk::api::time(), log);
+        logs.borrow_mut().insert(timestamp, log);
     });
 }
 
@@ -321,17 +385,44 @@ fn register_user(role: UserRole) -> Result<String, String> {
     let already_registered = USERS.with(|users| {
         users.borrow().contains_key(&caller_bytes)
     });
-    
+
     if already_registered {
         return Err("User already registered".to_string());
     }
 
+    let privacy_settings = PrivacySettings {
+        allow_research_use: false,
+        show_public_stats: false,
+        default_sharing_scope: None,
+        require_manual_approval: false,
+        watermark_on_view: false,
+        auto_expire_days: None,
+        notify_on_access: false,
+        allowed_data_regions: vec![],
+        custom_prefs: None
+    };
+
     let profile = User {
-        user_id: caller,
-        role: vec![role],
-        name: None,
+        user_id: Some(caller),
         created_at: ic_cdk::api::time(),
+        name: None,
         records: vec![],
+        principal_text: caller.to_string(),
+        email_hash: None,
+        roles: vec![role],
+        verified_tier: VerifiedTier::Basic,
+        nationality: None,
+        proof_of_identity: None,
+        identity_status: IdentityStatus::Pending,
+        profile: None,
+        verification_badge: None,
+        records_index: vec![],
+        research_submissions: vec![],
+        public_stats: None,
+        reward_multiplier: 1.0,
+        settings: privacy_settings,
+        tokens: TokenBalance::default(),
+        audit_pointer: vec![],
     };
 
     USERS.with(|users| {
@@ -359,7 +450,8 @@ fn update_user_name(name: String) -> Result<String, String> {
             }
 
             profile.name = Some(name.clone());
-            users_mut.insert(caller_bytes, profile);
+            let updated_profile = profile.clone(); // Re-assigning to avoid borrow issues
+            users_mut.insert(caller_bytes, updated_profile);
             USER_NAME_TO_PRINCIPAL.with(|map| map.borrow_mut().insert(name.clone(), caller));
 
             Ok(format!("User name updated to {}", name))
@@ -376,12 +468,11 @@ fn add_user_role(new_role: UserRole) -> Result<String, String> {
 
     USERS.with(|users| {
         let mut users_mut = users.borrow_mut();
-        if let Some(profile) = users_mut.get(&caller_bytes) {
-            let has_role = profile.role.iter().any(|r| r == &new_role);
+        if let Some(mut profile) = users_mut.get(&caller_bytes) {
+            let has_role = profile.roles.iter().any(|r| r == &new_role);
             if !has_role {
-                let mut new_profile = profile.clone();
-                new_profile.role.push(new_role);
-                users_mut.insert(caller_bytes, new_profile);
+                profile.roles.push(new_role);
+                users_mut.insert(caller_bytes, profile);
                 Ok("Role added to user".to_string())
             } else {
                 Err("User already has this role".to_string())
@@ -393,15 +484,15 @@ fn add_user_role(new_role: UserRole) -> Result<String, String> {
 }
 
 #[update]
-fn upload_record(file_hash: String, file_type: String, file_name: String, parent_folder_id: Option<String>) -> Result<String, String> {
+fn upload_record(file_cid: String, file_type: String, file_name: String, parent_folder_id: Option<String>) -> Result<String, String> {
     let caller = get_caller();
-    let user_profile = get_user_profile()?;
+    let user_profile = get_user_profile().ok_or("User not registered".to_string())?;
 
-    if !user_profile.role.contains(&UserRole::Patient) {
+    if !user_profile.roles.contains(&UserRole::Patient) {
         return Err("Only patients can upload medical records".to_string());
     }
 
-    let record_id_data = format!("{}-{}", file_hash, ic_cdk::api::time());
+    let record_id_data = format!("{}-{}", file_cid, ic_cdk::api::time());
     let record_id = generate_hash(record_id_data.as_bytes());
 
     let mut access_list = HashMap::new();
@@ -416,12 +507,23 @@ fn upload_record(file_hash: String, file_type: String, file_name: String, parent
     let record = MedicalRecord {
         record_id: record_id.clone(),
         owner: caller,
-        file_hash,
-        file_type,
+        file_cid: file_cid.clone(),
+        file_type: file_type.clone(),
         file_name: Some(file_name),
+        file_size: None,
+        aes_key_enc_for_owner: Vec::new(),
+        per_principal_keys: Vec::new(),
         timestamp: ic_cdk::api::time(),
-        access_list,
         parent_folder_id,
+        tags: Vec::new(),
+        references: Vec::new(),
+        derived_artifacts: Vec::new(),
+        metadata_completeness_score: 0,
+        uses_standard_codes: false,
+        plausibility_flags: Vec::new(),
+        access_list,
+        latest_version_id: None,
+        is_anonymized: false,
     };
 
     RECORDS.with(|records| {
@@ -436,37 +538,48 @@ fn upload_record(file_hash: String, file_type: String, file_name: String, parent
         }
     });
 
-    log_action(record_id.clone(), "upload".to_string());
+    log_action(Some(record_id.clone()), "upload".to_string(), None, Some(file_cid));
     Ok(record_id)
 }
 
 #[update]
 fn create_folder(folder_name: String, parent_folder_id: Option<String>) -> Result<String, String> {
     let caller = get_caller();
-    let user_profile = get_user_profile()?;
+    let user_profile = get_user_profile().ok_or("User not registered".to_string())?;
 
-    if !user_profile.role.contains(&UserRole::Patient) {
+    if !user_profile.roles.contains(&UserRole::Patient) {
         return Err("Only patients can create folders".to_string());
     }
-    
+
     let folder_id_data = format!("{}-{}", caller.to_text(), ic_cdk::api::time());
     let folder_id = generate_hash(folder_id_data.as_bytes());
 
     let folder_record: MedicalRecord = MedicalRecord {
         record_id: folder_id.clone(),
         owner: caller,
-        file_hash: "".to_string(),
+        file_cid: "".to_string(),
         file_type: "folder".to_string(),
+        file_name: Some(folder_name),
+        file_size: None,
+        aes_key_enc_for_owner: Vec::new(),
+        per_principal_keys: Vec::new(),
         timestamp: ic_cdk::api::time(),
-        access_list: HashMap::new(),
         parent_folder_id,
-        file_name: Some(folder_name)
+        tags: Vec::new(),
+        references: Vec::new(),
+        derived_artifacts: Vec::new(),
+        metadata_completeness_score: 0,
+        uses_standard_codes: false,
+        plausibility_flags: Vec::new(),
+        access_list: HashMap::new(),
+        latest_version_id: None,
+        is_anonymized: false,
     };
 
     RECORDS.with(|records| {
         records.borrow_mut().insert(folder_id.clone(), folder_record);
     });
-    
+
     USERS.with(|users| {
         let mut users_mut = users.borrow_mut();
         if let Some(mut profile) = users_mut.get(&caller.as_slice().to_vec()) {
@@ -475,7 +588,7 @@ fn create_folder(folder_name: String, parent_folder_id: Option<String>) -> Resul
         }
     });
 
-    log_action(folder_id.clone(), "create_folder".to_string());
+    log_action(Some(folder_id.clone()), "create_folder".to_string(), None, None);
     Ok(folder_id)
 }
 
@@ -485,7 +598,6 @@ fn revoke_access(record_id: String, to_principal: Principal) -> Result<(), Strin
 
     RECORDS.with(|records| {
         let mut records_ref = records.borrow_mut();
-        
         if let Some(mut record) = records_ref.get(&record_id) {
             if record.owner != caller {
                 return Err("Record not owned by caller".to_string());
@@ -493,8 +605,8 @@ fn revoke_access(record_id: String, to_principal: Principal) -> Result<(), Strin
 
             record.access_list.remove(&to_principal);
             records_ref.insert(record_id.clone(), record);
-            
-            log_action(record_id, format!("revoke_access_from_{}", to_principal.to_text()));
+
+            log_action(Some(record_id), format!("revoke_access_from_{}", to_principal.to_text()), Some(to_principal.to_text()), None);
             Ok(())
         } else {
             Err("Record not found".to_string())
@@ -505,9 +617,9 @@ fn revoke_access(record_id: String, to_principal: Principal) -> Result<(), Strin
 #[query]
 fn get_my_records() -> Result<Vec<MedicalRecord>, String> {
     let caller = get_caller();
-    let user_profile = get_user_profile()?;
+    let user_profile = get_user_profile().ok_or("User not registered".to_string())?;
 
-    if !user_profile.role.contains(&UserRole::Patient) {
+    if !user_profile.roles.contains(&UserRole::Patient) {
         return Err("Only patients can view their own records".to_string());
     }
 
@@ -528,15 +640,14 @@ fn get_my_records() -> Result<Vec<MedicalRecord>, String> {
 #[update]
 fn grant_access(record_id: String, to_principal: Principal, permission: AccessPermission) -> Result<(), String> {
     let caller = get_caller();
-    let user_profile = get_user_profile()?;
+    let user_profile = get_user_profile().ok_or("User not registered".to_string())?;
 
-    if !user_profile.role.contains(&UserRole::Patient) {
+    if !user_profile.roles.contains(&UserRole::Patient) {
         return Err("Only patients can grant access to records".to_string());
     }
 
     RECORDS.with(|records| {
         let mut records_ref = records.borrow_mut();
-        
         if let Some(mut record) = records_ref.get(&record_id) {
             if record.owner != caller {
                 return Err("Record not owned by caller".to_string());
@@ -544,8 +655,8 @@ fn grant_access(record_id: String, to_principal: Principal, permission: AccessPe
 
             record.access_list.insert(to_principal, permission);
             records_ref.insert(record_id.clone(), record);
-            
-            log_action(record_id, format!("grant_access_to_{}", to_principal.to_text()));
+
+            log_action(Some(record_id), format!("grant_access_to_{}", to_principal.to_text()), Some(to_principal.to_text()), None);
             Ok(())
         } else {
             Err("Record not found".to_string())
@@ -556,12 +667,12 @@ fn grant_access(record_id: String, to_principal: Principal, permission: AccessPe
 #[query]
 fn shared_with_me() -> Result<Vec<MedicalRecord>, String> {
     let caller = get_caller();
-    let user_profile = get_user_profile()?;
+    let user_profile = get_user_profile().ok_or("User not registered".to_string())?;
 
-    if user_profile.role.contains(&UserRole::Patient) {
+    if user_profile.roles.contains(&UserRole::Patient) {
         return Err("Patients do not have a 'shared with me' view".to_string());
     }
-    
+
     let result = RECORDS.with(|records| {
         records.borrow().iter()
             .filter_map(|entry| {
@@ -581,13 +692,17 @@ fn shared_with_me() -> Result<Vec<MedicalRecord>, String> {
 #[update]
 fn submit_for_research(record_id: String) -> Result<(), String> {
     let caller = get_caller();
-    let user_profile = get_user_profile()?;
+    let user_profile = get_user_profile().ok_or("User not registered".to_string())?;
 
-    if !user_profile.role.contains(&UserRole::Patient) {
+    if !user_profile.roles.contains(&UserRole::Patient) {
         return Err("Only patients can submit records for research".to_string());
     }
 
-    if !RECORDS.with(|records| records.borrow().get(&record_id).map_or(false, |r| r.owner == caller)) {
+    let is_owned_by_caller = RECORDS.with(|records| {
+        records.borrow().get(&record_id).map_or(false, |r| r.owner == caller)
+    });
+
+    if !is_owned_by_caller {
         return Err("Record not found or not owned by caller".to_string());
     }
 
@@ -605,12 +720,12 @@ fn submit_for_research(record_id: String) -> Result<(), String> {
         }
     });
 
-    log_action(record_id, "submit_for_research".to_string());
+    log_action(Some(record_id), "submit_for_research".to_string(), None, None);
     Ok(())
 }
 
 #[query]
-fn get_profile() -> Result<UserProfile, String> {
+fn get_profile() -> Result<User, String> {
     let caller = get_caller();
     let caller_bytes = caller.as_slice().to_vec();
     USERS.with(|users| {
@@ -633,7 +748,7 @@ fn update_settings() -> Result<(), String> {
         return Err("User not found".to_string());
     }
 
-    log_action("profile".to_string(), "update_settings".to_string());
+    log_action(None, "update_settings".to_string(), None, None);
     Ok(())
 }
 

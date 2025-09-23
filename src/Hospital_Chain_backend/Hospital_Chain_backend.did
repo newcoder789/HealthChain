@@ -5,29 +5,96 @@ type AccessPermission = record {
   can_edit : bool;
   can_view : bool;
 };
+type EncryptedKeyForPrincipal = record {
+  encrypted_key : blob;
+  principal_text : text;
+  expires_at : opt nat64;
+};
+type IdentityStatus = variant { Approved; Rejected; Expired; Pending };
 type MedicalRecord = record {
+  references : vec text;
+  per_principal_keys : vec EncryptedKeyForPrincipal;
+  plausibility_flags : vec text;
+  latest_version_id : opt text;
   owner : principal;
-  file_hash : text;
+  tags : vec text;
+  uses_standard_codes : bool;
   file_name : opt text;
+  file_cid : text;
+  file_size : opt nat64;
   file_type : text;
+  is_anonymized : bool;
   parent_folder_id : opt text;
   timestamp : nat64;
+  metadata_completeness_score : nat8;
+  aes_key_enc_for_owner : blob;
   record_id : text;
+  derived_artifacts : vec text;
   access_list : vec record { principal; AccessPermission };
+};
+type PrivacySettings = record {
+  auto_expire_days : opt nat32;
+  show_public_stats : bool;
+  allowed_data_regions : vec text;
+  default_sharing_scope : opt SharingScope;
+  custom_prefs : opt vec record { text; text };
+  watermark_on_view : bool;
+  require_manual_approval : bool;
+  allow_research_use : bool;
+  notify_on_access : bool;
+};
+type PublicStats = record {
+  region : opt text;
+  tags : vec text;
+  visible : bool;
+  age_band : opt text;
+  record_count : nat32;
 };
 type Result = variant { Ok : text; Err : text };
 type Result_1 = variant { Ok : vec MedicalRecord; Err : text };
 type Result_2 = variant { Ok : principal; Err : text };
-type Result_3 = variant { Ok : UserProfile; Err : text };
+type Result_3 = variant { Ok : User; Err : text };
 type Result_4 = variant { Ok; Err : text };
-type UserProfile = record {
+type SharingScope = variant { TrustedDoctors; Private; PublicAnonymized };
+type User = record {
   records : vec text;
+  verified_tier : VerifiedTier;
+  identity_status : IdentityStatus;
   name : opt text;
-  role : vec UserRole;
+  public_stats : opt PublicStats;
+  verification_badge : opt VerificationBadge;
   created_at : nat64;
-  user_id : principal;
+  principal_text : text;
+  nationality : opt text;
+  user_id : opt principal;
+  reward_multiplier : float32;
+  settings : PrivacySettings;
+  email_hash : opt text;
+  tokens : record {};
+  proof_of_identity : opt VerificationEvidence;
+  research_submissions : vec text;
+  audit_pointer : vec nat64;
+  records_index : vec text;
+  roles : vec UserRole;
+  profile : opt UserProfile;
 };
-type UserRole = variant { Doctor; Researcher; Patient };
+type UserProfile = record {
+  bio : opt text;
+  avatar_cid : opt text;
+  meta : opt vec record { text; text };
+  phone_hash : opt text;
+};
+type UserRole = variant { Doctor; Researcher; Admin; Patient };
+type VerificationBadge = record {
+  evidence_cid : opt text;
+  verified : bool;
+  issued_at : nat64;
+  issuer : text;
+  badge_signature : opt blob;
+  expires_at : opt nat64;
+};
+type VerificationEvidence = record { evidence_cid : text; uploaded_at : nat64 };
+type VerifiedTier = variant { Basic; Verified };
 service : () -> {
   add_user_role : (UserRole) -> (Result);
   create_folder : (text, opt text) -> (Result);

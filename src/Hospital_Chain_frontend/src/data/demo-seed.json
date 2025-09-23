@@ -1,0 +1,40 @@
+{
+  "token": "HCT",
+  "balances": {
+    "Aryan Dixit": 50,
+    "Ayush Rawat": 50,
+    "Priya Singh": 50,
+    "Dr. Sarah Smith": 0,
+    "Dr. Raj Mehta": 0,
+    "Dr. Kim Patel": 500,
+    "Admin": 0
+  },
+  "bounties": [
+    {
+      "id": "bounty-eye-001",
+      "title": "Eye Imaging — Longitudinal",
+      "tags": ["eye-imaging", "longitudinal"],
+      "budget": 200,
+      "filters": { "file_type": "imaging", "min_years_history": 2 },
+      "status": "open"
+    },
+    {
+      "id": "bounty-blood-001",
+      "title": "Blood Panel Trends",
+      "tags": ["blood-panel", "lab"],
+      "budget": 100,
+      "filters": { "file_type": "lab", "years": 5 },
+      "status": "open"
+    }
+  ],
+  "users": [
+    { "name": "Aryan Dixit", "role": "Patient" },
+    { "name": "Ayush Rawat", "role": "Patient" },
+    { "name": "Priya Singh", "role": "Patient" },
+    { "name": "Dr. Sarah Smith", "role": "Doctor" },
+    { "name": "Dr. Raj Mehta", "role": "Doctor" },
+    { "name": "Dr. Kim Patel", "role": "Researcher" }
+  ]
+}
+
+
