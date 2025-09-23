@@ -8,21 +8,65 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::borrow::Cow;
 use ic_cdk::api::time;
-use ic_cdk::api::caller;
-
+use ic_cdk::api::msg_caller;
 // --- Data Structures ---
 
+// ---Medical Records & Metadata ---
+type AccessList = HashMap<Principal, AccessPermission>;
 #[derive(CandidType, Deserialize, Serialize, Clone)]
-struct MedicalRecord {
+pub struct MedicalRecord {
     record_id: String,
-    owner: Principal,
-    file_hash: String,
-    file_type: String,
+    owner: String,
+    file_cid: String,
     file_name: Option<String>,
+    file_type: String,
+    file_size: Option<u64>,
+    aes_key_enc_for_owner: Vec<u8>,
+    per_principal_keys: Vec<EncryptedKeyForPrincipal>,
     timestamp: u64,
-    access_list: HashMap<Principal, AccessPermission>,
     parent_folder_id: Option<String>,
+    tags: Vec<String>,
+    references: Vec<String>,
+    derived_artifacts: Vec<String>,
+    metadata_completeness_score: u8,
+    uses_standard_codes: bool,
+    plausibility_flags: Vec<String>,
+    access_list: AccessList,
+    latest_version_id: Option<String>,
+    is_anonymized: bool,
 }
+
+#[derive(CandidType, Deserialize, Serialize, Clone)]
+pub struct RecordVersion {
+    version_id: String,
+    record_id: String,
+    file_cid: String,
+    change_note: String,
+    previous_version_id: Option<String>,
+    uploader: String,
+    timestamp: u64,
+}
+
+#[derive(CandidType, Deserialize, Serialize, Clone)]
+pub struct AccessGrant {
+    principal_text: String,
+    can_view: bool,
+    can_edit: bool,
+    can_share: bool,
+    is_anonymized: bool,
+    expires_at: Option<u64>,
+    granted_at: u64,
+    granted_by: String,
+}
+
+
+#[derive(CandidType, Deserialize, Serialize, Clone)]
+pub struct EncryptedKeyForPrincipal {
+    principal_text: String,
+    encrypted_key: Vec<u8>,
+    expires_at: Option<u64>,
+}
+
 
 #[derive(CandidType, Deserialize, Serialize, Clone)]
 struct AccessPermission {
@@ -35,29 +79,118 @@ struct AccessPermission {
 
 // User role enum for multi-role user system
 #[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
-enum UserRole {
-    Patient,
-    Doctor,
-    Researcher,
-}
+pub enum UserRole { Patient, Doctor, Researcher, Admin }
+
+
 
 #[derive(CandidType, Deserialize, Serialize, Clone)]
-struct UserProfile {
+pub struct User {
     user_id: Principal,
-    role: Vec<UserRole>,
-    name: Option<String>, // Added for user identification
+    name: Option<String>, 
     created_at: u64,
     records: Vec<String>,
+    principal_text: String,
+    email_hash: Option<String>,
+    roles: Vec<UserRole>,                   // Patient, Doctor, Researcher, Admin
+    verified_tier: VerifiedTier,            // Basic or Verified
+    nationality: Option<String>,            // optional verified field
+    proof_of_identity: Option<VerificationEvidence>,
+    identity_status: IdentityStatus,        // Pending/Approved/Rejected/Expired
+    profile: Option<UserProfile>,
+    verification_badge: Option<VerificationBadge>,
+    records_index: Vec<String>,
+    research_submissions: Vec<String>,
+    public_stats: Option<PublicStats>,      // summary counts visible if consented
+    reward_multiplier: f32,
+    settings: PrivacySettings,
+    tokens: TokenBalance,
+    audit_pointer: Vec<u64>,                 // log IDs for quick lookup
 }
 
 #[derive(CandidType, Deserialize, Serialize, Clone)]
-struct AuditLog {
-    record_id: String,
-    actor: Principal,
+pub struct AuditLogEntry {
+    id: u64,
+    actor: String,
     action: String,
+    record_id: Option<String>,
+    target: Option<String>,
+    meta_cid: Option<String>,
     timestamp: u64,
 }
 
+
+// ----- Enums & helper structs ----
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+enum VerifiedTier { Basic, Verified }
+
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+enum IdentityStatus { Pending, Approved, Rejected, Expired }
+
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+struct PrivacySettings{
+
+}
+
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+struct VerificationBadge {
+    verified: bool,
+    issuer: String,
+    issued_at: u64,
+    expires_at: Option<u64>,
+    evidence_cid: Option<String>,
+    badge_signature: Option<Vec<u8>>,
+}
+
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+struct TokenBalance{
+    
+}
+
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+struct PublicStats {
+    record_count: u32,
+    tags: Vec<String>,
+    region: Option<String>,
+    age_band: Option<String>,
+    visible: bool,
+}
+
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+struct UserProfile {
+    avatar_cid: Option<String>,
+    bio: Option<String>,
+    phone_hash: Option<String>,
+    meta: Option<HashMap<String,String>>,
+}
+#[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+struct VerificationEvidence { evidence_cid: String, uploaded_at: u64 }
+
+
+
+
+// 6--- Research Marketplace, Consent & Tokenomics ---
+pub struct Consent {
+    consent_id: String,
+    owner_principal: String,
+    researcher_principal: Option<String>,
+    scope: String,
+    purpose: String,
+    expires_at: Option<u64>,
+    created_at: u64,
+    consent_evidence_cid: Option<String>,
+    revoked_at: Option<u64>,
+}
+
+pub struct ResearchSubmission {
+    submission_id: String,
+    owner: String,
+    aggregated_cid: String,
+    researcher_principal: Option<String>,
+    reward_amount: u128,
+    provenance_cid: Option<String>,
+    consent_ids: Vec<String>,
+    created_at: u64,
+}
 // --- Storable Implementations ---
 
 impl Storable for MedicalRecord {
@@ -71,6 +204,7 @@ impl Storable for MedicalRecord {
         candid::encode_one(self).expect("Failed to encode MedicalRecord")
     }
     const BOUND: Bound = Bound::Unbounded;
+
 }
 
 impl Storable for AccessPermission {
@@ -86,28 +220,28 @@ impl Storable for AccessPermission {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-impl Storable for UserProfile {
+impl Storable for User {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(candid::encode_one(self).expect("Failed to encode UserProfile"))
+        Cow::Owned(candid::encode_one(self).expect("Failed to encode User"))
     }
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::decode_one(bytes.as_ref()).expect("Failed to decode UserProfile")
+        candid::decode_one(bytes.as_ref()).expect("Failed to decode User")
     }
     fn into_bytes(self) -> Vec<u8> {
-        candid::encode_one(self).expect("Failed to encode UserProfile")
+        candid::encode_one(self).expect("Failed to encode User")
     }
     const BOUND: Bound = Bound::Unbounded;
 }
 
-impl Storable for AuditLog {
+impl Storable for AuditLogEntry {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(candid::encode_one(self).expect("Failed to encode AuditLog"))
+        Cow::Owned(candid::encode_one(self).expect("Failed to encode AuditLogEntry"))
     }
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::decode_one(bytes.as_ref()).expect("Failed to decode AuditLog")
+        candid::decode_one(bytes.as_ref()).expect("Failed to decode AuditLogEntry")
     }
     fn into_bytes(self) -> Vec<u8> {
-        candid::encode_one(self).expect("Failed to encode AuditLog")
+        candid::encode_one(self).expect("Failed to encode AuditLogEntry")
     }
     const BOUND: Bound = Bound::Unbounded;
 }
@@ -120,7 +254,7 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(memory_manager::MemoryManager::init(DefaultMemoryImpl::default()));
 
-    static USERS: RefCell<StableBTreeMap<Vec<u8>, UserProfile, Memory>> = RefCell::new(
+    static USERS: RefCell<StableBTreeMap<Vec<u8>, User, Memory>> = RefCell::new(
         StableBTreeMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
         )
@@ -138,7 +272,7 @@ thread_local! {
         )
     );
 
-    static AUDIT_LOGS: RefCell<StableBTreeMap<u64, AuditLog, Memory>> = RefCell::new(
+    static AUDIT_LOGS: RefCell<StableBTreeMap<u64, AuditLogEntry, Memory>> = RefCell::new(
         StableBTreeMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))
         )
@@ -154,10 +288,10 @@ fn generate_hash(data: &[u8]) -> String {
 }
 
 fn get_caller() -> Principal {
-    ic_cdk::api::msg_caller()
+    msg_caller()
 }
 
-fn get_user_profile() -> Result<UserProfile, String> {
+fn get_user_profile() -> Result<User, String> {
     let caller = get_caller();
     let caller_bytes = caller.as_slice().to_vec();
     USERS.with(|users| {
@@ -166,9 +300,9 @@ fn get_user_profile() -> Result<UserProfile, String> {
 }
 
 fn log_action(record_id: String, action: String) {
-    let log = AuditLog {
+    let log = AuditLogEntry {
         record_id,
-        actor: get_caller(),
+        actor: get_caller().to_string(),
         action,
         timestamp: ic_cdk::api::time(),
     };
@@ -192,7 +326,7 @@ fn register_user(role: UserRole) -> Result<String, String> {
         return Err("User already registered".to_string());
     }
 
-    let profile = UserProfile {
+    let profile = User {
         user_id: caller,
         role: vec![role],
         name: None,
