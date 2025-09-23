@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Microscope, Database, BarChart3, Download, Search, Filter, Globe, Shield, Users, TrendingUp, Coins } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Microscope, Database, BarChart3, Download, Search, Filter, Globe, Shield, Users, TrendingUp, Coins, Plus, X, Eye, Edit3, Trash2, Calendar, Target, DollarSign, Tag } from 'lucide-react';
 import AuditLogTable from '../components/AuditLogTable';
 import { TokenService } from '../utils/TokenService';
 import { useDemo } from '../utils/DemoContext';
@@ -14,10 +14,118 @@ const ResearcherDashboard = () => {
   const [selectedBounty, setSelectedBounty] = useState(null);
   const [datasetCid, setDatasetCid] = useState('');
   const [busy, setBusy] = useState(false);
+  
+  // Modal states
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showDatasetRequestModal, setShowDatasetRequestModal] = useState(false);
+  const [showProjectDetailsModal, setShowProjectDetailsModal] = useState(false);
+  const [showBountyModal, setShowBountyModal] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedDataset, setSelectedDataset] = useState(null);
+  
+  // Form states
+  const [newProjectForm, setNewProjectForm] = useState({
+    name: '',
+    description: '',
+    category: '',
+    collaborators: '',
+    startDate: '',
+    endDate: '',
+    budget: 0
+  });
+  
+  const [datasetRequestForm, setDatasetRequestForm] = useState({
+    researchPurpose: '',
+    dataRequirements: '',
+    duration: '',
+    ethicalApproval: false,
+    institution: ''
+  });
 
   useEffect(()=>{
     try { setBounties(TokenService.getBounties()); } catch(e) {}
   },[]);
+
+  // Modal handlers
+  const handleCreateProject = () => {
+    setShowNewProjectModal(true);
+  };
+
+  const handleRequestDataset = (dataset) => {
+    setSelectedDataset(dataset);
+    setShowDatasetRequestModal(true);
+  };
+
+  const handleViewProject = (project) => {
+    setSelectedProject(project);
+    setShowProjectDetailsModal(true);
+  };
+
+  const handleCreateBounty = () => {
+    setShowBountyModal(true);
+  };
+
+  const handleSubmitProject = async () => {
+    setBusy(true);
+    try {
+      // Simulate project creation
+      const newProject = {
+        id: Date.now(),
+        name: newProjectForm.name,
+        description: newProjectForm.description,
+        category: newProjectForm.category,
+        status: 'planning',
+        progress: 0,
+        collaborators: newProjectForm.collaborators.split(',').map(c => c.trim()).filter(Boolean),
+        datasets: 0,
+        startDate: newProjectForm.startDate,
+        endDate: newProjectForm.endDate,
+        budget: newProjectForm.budget
+      };
+      
+      // Add to mock projects (in real app, this would call the backend)
+      mockProjects.push(newProject);
+      
+      setNewProjectForm({
+        name: '',
+        description: '',
+        category: '',
+        collaborators: '',
+        startDate: '',
+        endDate: '',
+        budget: 0
+      });
+      setShowNewProjectModal(false);
+      alert('Project created successfully!');
+    } catch (error) {
+      console.error('Error creating project:', error);
+      alert('Failed to create project. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSubmitDatasetRequest = async () => {
+    setBusy(true);
+    try {
+      // Simulate dataset request
+      alert(`Dataset request submitted for: ${selectedDataset?.name}\nPurpose: ${datasetRequestForm.researchPurpose}`);
+      
+      setDatasetRequestForm({
+        researchPurpose: '',
+        dataRequirements: '',
+        duration: '',
+        ethicalApproval: false,
+        institution: ''
+      });
+      setShowDatasetRequestModal(false);
+    } catch (error) {
+      console.error('Error submitting dataset request:', error);
+      alert('Failed to submit request. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const mockDatasets = [
     {
@@ -249,12 +357,16 @@ const ResearcherDashboard = () => {
                         Privacy-preserved with differential privacy algorithms
                       </div>
                       <div className="flex items-center space-x-2">
-                        <button className="px-4 py-2 glass-card border border-accent-400/50 text-accent-400 rounded-lg hover:bg-accent-400/10 transition-all duration-200">
+                        <button 
+                          onClick={() => handleRequestDataset(dataset)}
+                          className="px-4 py-2 glass-card border border-accent-400/50 text-accent-400 rounded-lg hover:bg-accent-400/10 transition-all duration-200 flex items-center"
+                        >
+                          <Target className="h-4 w-4 mr-2" />
                           Request Access
                         </button>
                         {dataset.access === 'approved' && (
-                          <button className="px-4 py-2 bg-gradient-to-r from-accent-500 to-primary-500 text-white rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200">
-                            <Download className="h-4 w-4 mr-2 inline" />
+                          <button className="px-4 py-2 bg-gradient-to-r from-accent-500 to-primary-500 text-white rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200 flex items-center">
+                            <Download className="h-4 w-4 mr-2" />
                             Download
                           </button>
                         )}
@@ -271,7 +383,10 @@ const ResearcherDashboard = () => {
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-white">Research Projects</h2>
                 <Protect level="green" label="Bounty (mock)">
-                <button className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200">
+                <button 
+                  onClick={handleCreateProject}
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200"
+                >
                   <Microscope className="h-4 w-4 mr-2" />
                   New Project
                 </button>
@@ -325,10 +440,15 @@ const ResearcherDashboard = () => {
                     </div>
 
                     <div className="flex items-center space-x-4">
-                      <button className="px-4 py-2 glass-card border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-800/50 transition-all duration-200">
+                      <button 
+                        onClick={() => handleViewProject(project)}
+                        className="px-4 py-2 glass-card border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-800/50 transition-all duration-200 flex items-center"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
                         View Details
                       </button>
-                      <button className="px-4 py-2 bg-accent-500/20 text-accent-400 rounded-lg hover:bg-accent-500/30 transition-all duration-200">
+                      <button className="px-4 py-2 bg-accent-500/20 text-accent-400 rounded-lg hover:bg-accent-500/30 transition-all duration-200 flex items-center">
+                        <Users className="h-4 w-4 mr-2" />
                         Collaborate
                       </button>
                     </div>
@@ -352,17 +472,10 @@ const ResearcherDashboard = () => {
                 </div>
                 <div className="mt-3">
                   <Protect level="green" label="Create (mock)">
-                    <button onClick={()=>{
-                      if (!form.title || !form.budget) { alert('Enter title and budget'); return; }
-                      setBusy(true);
-                      try {
-                        const id = TokenService.createBounty({ title: form.title, description: form.description, tags: (form.tags||'').split(',').map(t=>t.trim()).filter(Boolean), budget: Number(form.budget)||0 });
-                        TokenService.depositToEscrow(id, Number(form.budget)||0);
-                        setBounties(TokenService.getBounties());
-                        alert('Bounty created and funded (demo)');
-                        setForm({ title: '', description: '', tags: '', budget: 0 });
-                      } finally { setBusy(false); }
-                    }} disabled={busy} className="px-4 py-2 bg-indigo-600 text-white rounded inline-flex items-center disabled:opacity-50"><Coins className="h-4 w-4 mr-1"/>{busy ? 'Processing...' : 'Create & Fund'}</button>
+                    <button onClick={handleCreateBounty} className="px-4 py-2 bg-indigo-600 text-white rounded inline-flex items-center hover:bg-indigo-700 transition-colors duration-200">
+                      <Coins className="h-4 w-4 mr-1"/>
+                      Create & Fund Bounty
+                    </button>
                   </Protect>
                 </div>
               </div>
@@ -480,6 +593,452 @@ const ResearcherDashboard = () => {
           )}
         </motion.div>
       </div>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {/* New Project Modal */}
+        {showNewProjectModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-8 rounded-2xl border border-white/20 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">Create New Research Project</h3>
+                <button
+                  onClick={() => setShowNewProjectModal(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Project Name</label>
+                    <input
+                      type="text"
+                      value={newProjectForm.name}
+                      onChange={(e) => setNewProjectForm(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                      placeholder="Enter project name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Category</label>
+                    <select
+                      value={newProjectForm.category}
+                      onChange={(e) => setNewProjectForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                    >
+                      <option value="">Select category</option>
+                      <option value="Cardiology">Cardiology</option>
+                      <option value="Oncology">Oncology</option>
+                      <option value="Neurology">Neurology</option>
+                      <option value="Endocrinology">Endocrinology</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Description</label>
+                  <textarea
+                    value={newProjectForm.description}
+                    onChange={(e) => setNewProjectForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400 h-24"
+                    placeholder="Describe your research project"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Start Date</label>
+                    <input
+                      type="date"
+                      value={newProjectForm.startDate}
+                      onChange={(e) => setNewProjectForm(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">End Date</label>
+                    <input
+                      type="date"
+                      value={newProjectForm.endDate}
+                      onChange={(e) => setNewProjectForm(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Collaborators (comma-separated emails)</label>
+                    <input
+                      type="text"
+                      value={newProjectForm.collaborators}
+                      onChange={(e) => setNewProjectForm(prev => ({ ...prev, collaborators: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                      placeholder="collaborator1@email.com, collaborator2@email.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Budget (HCT)</label>
+                    <input
+                      type="number"
+                      value={newProjectForm.budget}
+                      onChange={(e) => setNewProjectForm(prev => ({ ...prev, budget: Number(e.target.value) || 0 }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex space-x-4 mt-8">
+                <button
+                  onClick={() => setShowNewProjectModal(false)}
+                  className="flex-1 px-6 py-3 glass-card border border-gray-600 text-gray-300 font-semibold rounded-lg hover:bg-gray-800/50 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitProject}
+                  disabled={busy || !newProjectForm.name}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200 disabled:opacity-50"
+                >
+                  {busy ? 'Creating...' : 'Create Project'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Dataset Request Modal */}
+        {showDatasetRequestModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-8 rounded-2xl border border-white/20 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">Request Dataset Access</h3>
+                <button
+                  onClick={() => setShowDatasetRequestModal(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="mb-6 p-4 bg-gray-800/50 rounded-lg">
+                <h4 className="text-lg font-semibold text-white mb-2">{selectedDataset?.name}</h4>
+                <p className="text-gray-300 text-sm">{selectedDataset?.category} • {selectedDataset?.records.toLocaleString()} records</p>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Research Purpose</label>
+                  <textarea
+                    value={datasetRequestForm.researchPurpose}
+                    onChange={(e) => setDatasetRequestForm(prev => ({ ...prev, researchPurpose: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400 h-24"
+                    placeholder="Describe your research objectives and how you plan to use this dataset"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Data Requirements</label>
+                  <textarea
+                    value={datasetRequestForm.dataRequirements}
+                    onChange={(e) => setDatasetRequestForm(prev => ({ ...prev, dataRequirements: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400 h-20"
+                    placeholder="Specify what data fields and time periods you need"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Duration</label>
+                    <select
+                      value={datasetRequestForm.duration}
+                      onChange={(e) => setDatasetRequestForm(prev => ({ ...prev, duration: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                    >
+                      <option value="">Select duration</option>
+                      <option value="1-month">1 Month</option>
+                      <option value="3-months">3 Months</option>
+                      <option value="6-months">6 Months</option>
+                      <option value="1-year">1 Year</option>
+                      <option value="2-years">2 Years</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Institution</label>
+                    <input
+                      type="text"
+                      value={datasetRequestForm.institution}
+                      onChange={(e) => setDatasetRequestForm(prev => ({ ...prev, institution: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                      placeholder="Your research institution"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    id="ethicalApproval"
+                    checked={datasetRequestForm.ethicalApproval}
+                    onChange={(e) => setDatasetRequestForm(prev => ({ ...prev, ethicalApproval: e.target.checked }))}
+                    className="w-4 h-4 text-accent-600 bg-gray-800 border-gray-600 rounded focus:ring-accent-500"
+                  />
+                  <label htmlFor="ethicalApproval" className="text-sm text-gray-300">
+                    I have obtained ethical approval for this research
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex space-x-4 mt-8">
+                <button
+                  onClick={() => setShowDatasetRequestModal(false)}
+                  className="flex-1 px-6 py-3 glass-card border border-gray-600 text-gray-300 font-semibold rounded-lg hover:bg-gray-800/50 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitDatasetRequest}
+                  disabled={busy || !datasetRequestForm.researchPurpose}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200 disabled:opacity-50"
+                >
+                  {busy ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Project Details Modal */}
+        {showProjectDetailsModal && selectedProject && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-8 rounded-2xl border border-white/20 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">{selectedProject.name}</h3>
+                <button
+                  onClick={() => setShowProjectDetailsModal(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <h4 className="text-lg font-semibold text-white mb-4">Project Information</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm text-gray-400">Description</label>
+                      <p className="text-white">{selectedProject.description || 'No description provided'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Category</label>
+                      <p className="text-white">{selectedProject.category || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Status</label>
+                      <span className={`px-3 py-1 text-xs rounded-full ${
+                        selectedProject.status === 'active' 
+                          ? 'bg-accent-500/20 text-accent-400' 
+                          : 'bg-secondary-500/20 text-secondary-400'
+                      }`}>
+                        {selectedProject.status}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Progress</label>
+                      <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                        <div 
+                          className="bg-gradient-to-r from-accent-500 to-primary-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${selectedProject.progress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-white text-sm mt-1">{selectedProject.progress}%</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-lg font-semibold text-white mb-4">Project Details</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm text-gray-400">Collaborators</label>
+                      <p className="text-white">{selectedProject.collaborators?.length || 0} members</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Datasets</label>
+                      <p className="text-white">{selectedProject.datasets || 0} datasets</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Budget</label>
+                      <p className="text-white">{selectedProject.budget || 0} HCT</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Timeline</label>
+                      <p className="text-white">
+                        {selectedProject.startDate ? new Date(selectedProject.startDate).toLocaleDateString() : 'Not set'} - 
+                        {selectedProject.endDate ? new Date(selectedProject.endDate).toLocaleDateString() : 'Not set'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex space-x-4">
+                <button
+                  onClick={() => setShowProjectDetailsModal(false)}
+                  className="flex-1 px-6 py-3 glass-card border border-gray-600 text-gray-300 font-semibold rounded-lg hover:bg-gray-800/50 transition-all duration-200"
+                >
+                  Close
+                </button>
+                <button className="flex-1 px-6 py-3 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200">
+                  Edit Project
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Bounty Creation Modal */}
+        {showBountyModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-8 rounded-2xl border border-white/20 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">Create Research Bounty</h3>
+                <button
+                  onClick={() => setShowBountyModal(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Bounty Title</label>
+                    <input
+                      type="text"
+                      value={form.title}
+                      onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                      placeholder="Enter bounty title"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Budget (HCT)</label>
+                    <input
+                      type="number"
+                      value={form.budget}
+                      onChange={(e) => setForm(prev => ({ ...prev, budget: Number(e.target.value) || 0 }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Description</label>
+                  <textarea
+                    value={form.description}
+                    onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400 h-24"
+                    placeholder="Describe what you're looking for"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Tags (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={form.tags}
+                    onChange={(e) => setForm(prev => ({ ...prev, tags: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-accent-400"
+                    placeholder="cardiology, diabetes, machine-learning"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-4 mt-8">
+                <button
+                  onClick={() => setShowBountyModal(false)}
+                  className="flex-1 px-6 py-3 glass-card border border-gray-600 text-gray-300 font-semibold rounded-lg hover:bg-gray-800/50 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!form.title || !form.budget) { alert('Enter title and budget'); return; }
+                    setBusy(true);
+                    try {
+                      const id = TokenService.createBounty({ 
+                        title: form.title, 
+                        description: form.description, 
+                        tags: (form.tags||'').split(',').map(t=>t.trim()).filter(Boolean), 
+                        budget: Number(form.budget)||0 
+                      });
+                      TokenService.depositToEscrow(id, Number(form.budget)||0);
+                      setBounties(TokenService.getBounties());
+                      alert('Bounty created and funded (demo)');
+                      setForm({ title: '', description: '', tags: '', budget: 0 });
+                      setShowBountyModal(false);
+                    } finally { setBusy(false); }
+                  }}
+                  disabled={busy || !form.title || !form.budget}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200 disabled:opacity-50"
+                >
+                  {busy ? 'Processing...' : 'Create & Fund Bounty'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -10,6 +10,7 @@ import Demo from './pages/Demo';
 import PatientDashboard from './pages/PatientDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
 import ResearcherDashboard from './pages/ResearcherDashboard';
+import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
 import './index.scss';
 import AdminPortal from './pages/AdminPortal';
@@ -51,6 +52,7 @@ function AppRouter() {
         <Route path="/dashboard/patient" element={<PatientDashboard />} />
         <Route path="/dashboard/doctor" element={<DoctorDashboard />} />
         <Route path="/dashboard/researcher" element={<ResearcherDashboard />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="/admin" element={<AdminPortal />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

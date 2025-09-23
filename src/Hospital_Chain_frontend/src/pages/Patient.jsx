@@ -9,7 +9,7 @@ import FeatureCard from '../components/FeatureCard';
 const Patient = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const { isAuthenticated, userRole, login, registerUser } = useAuth();
+  const { isAuthenticated, userRole, login, registerUser, actor } = useAuth();
 
   const handleAccess = async () => {
     setLoading(true);

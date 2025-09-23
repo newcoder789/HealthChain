@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Stethoscope, Users, FileText, Activity, Search, Bell, Clock, Eye, TrendingUp, BadgeCheck, Upload } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Stethoscope, Users, FileText, Activity, Search, Bell, Clock, Eye, TrendingUp, BadgeCheck, Upload, Plus, X, Calendar, MessageSquare, Shield, Download, Share2, Edit3, Trash2, UserPlus, Target, AlertCircle, CheckCircle } from 'lucide-react';
 import AuditLogTable from '../components/AuditLogTable';
 import { useAuth } from '../utils/AuthContext';
 import { useDemo } from '../utils/DemoContext';
@@ -15,6 +15,41 @@ const DoctorDashboard = () => {
   const [patientResult, setPatientResult] = useState(null);
   const [evidenceFile, setEvidenceFile] = useState(null);
   const [busy, setBusy] = useState(false);
+  
+  // Modal states
+  const [showPatientSearchModal, setShowPatientSearchModal] = useState(false);
+  const [showRecordAccessModal, setShowRecordAccessModal] = useState(false);
+  const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [showPatientDetailsModal, setShowPatientDetailsModal] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  
+  // Form states
+  const [patientSearchForm, setPatientSearchForm] = useState({
+    name: '',
+    email: '',
+    patientId: '',
+    searchType: 'name'
+  });
+  
+  const [appointmentForm, setAppointmentForm] = useState({
+    patientId: '',
+    patientName: '',
+    date: '',
+    time: '',
+    type: '',
+    notes: '',
+    duration: 30
+  });
+  
+  const [verificationForm, setVerificationForm] = useState({
+    licenseNumber: '',
+    institution: '',
+    specialty: '',
+    experience: '',
+    evidence: null
+  });
 
   useEffect(() => {
     // fetch profile badge if available
@@ -25,6 +60,106 @@ const DoctorDashboard = () => {
       } catch (e) {}
     })();
   }, [actor]);
+
+  // Modal handlers
+  const handleSearchPatient = () => {
+    setShowPatientSearchModal(true);
+  };
+
+  const handleViewPatient = (patient) => {
+    setSelectedPatient(patient);
+    setShowPatientDetailsModal(true);
+  };
+
+  const handleAccessRecords = (patient) => {
+    setSelectedPatient(patient);
+    setShowRecordAccessModal(true);
+  };
+
+  const handleScheduleAppointment = (patient = null) => {
+    if (patient) {
+      setAppointmentForm(prev => ({
+        ...prev,
+        patientId: patient.id,
+        patientName: patient.name
+      }));
+    }
+    setShowAppointmentModal(true);
+  };
+
+  const handleVerification = () => {
+    setShowVerificationModal(true);
+  };
+
+  const handleSubmitPatientSearch = async () => {
+    setBusy(true);
+    try {
+      // Simulate patient search
+      const searchResult = {
+        id: Date.now(),
+        name: patientSearchForm.name || 'John Doe',
+        email: patientSearchForm.email || 'john@example.com',
+        age: 45,
+        lastVisit: '2025-01-10',
+        condition: 'Hypertension',
+        status: 'stable',
+        recordsCount: 5
+      };
+      
+      setPatientResult(searchResult);
+      setShowPatientSearchModal(false);
+    } catch (error) {
+      console.error('Error searching patient:', error);
+      alert('Failed to search patient. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSubmitAppointment = async () => {
+    setBusy(true);
+    try {
+      // Simulate appointment scheduling
+      alert(`Appointment scheduled for ${appointmentForm.patientName} on ${appointmentForm.date} at ${appointmentForm.time}`);
+      
+      setAppointmentForm({
+        patientId: '',
+        patientName: '',
+        date: '',
+        time: '',
+        type: '',
+        notes: '',
+        duration: 30
+      });
+      setShowAppointmentModal(false);
+    } catch (error) {
+      console.error('Error scheduling appointment:', error);
+      alert('Failed to schedule appointment. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSubmitVerification = async () => {
+    setBusy(true);
+    try {
+      if (!verificationForm.evidence) {
+        alert('Please upload verification evidence');
+        return;
+      }
+      
+      // Simulate verification submission
+      await actor.request_doctor_verification('demo_evidence_cid');
+      setVerification({ status: 'pending' });
+      alert('Verification evidence submitted successfully!');
+      setShowVerificationModal(false);
+    } catch (error) {
+      console.error('Error submitting verification:', error);
+      alert('Failed to submit verification. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const mockPatients = [
     {
@@ -197,22 +332,20 @@ const DoctorDashboard = () => {
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-white">Patient List</h2>
                 <div className="flex items-center space-x-4">
-                  <div className="relative">
-                    <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Search patients..."
-                      value={searchName}
-                      onChange={(e)=>setSearchName(e.target.value)}
-                      className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-secondary-400"
-                    />
-                  </div>
-                  <Protect level="green" label="Search (mock ok)">
-                    <button onClick={async ()=>{
-                      setBusy(true);
-                      try { const res = await actor.get_principal_by_name(searchName); setPatientResult(res); } catch(e) { setPatientResult(null);} finally { setBusy(false); }
-                    }} disabled={busy || !searchName} className="px-4 py-2 bg-secondary-600 text-white rounded disabled:opacity-50">{busy ? 'Searching...' : 'Lookup'}</button>
-                  </Protect>
+                  <button
+                    onClick={handleSearchPatient}
+                    className="inline-flex items-center px-4 py-2 bg-secondary-600 text-white rounded-lg hover:bg-secondary-700 transition-colors duration-200"
+                  >
+                    <Search className="h-4 w-4 mr-2" />
+                    Search Patient
+                  </button>
+                  <button
+                    onClick={() => handleScheduleAppointment()}
+                    className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors duration-200"
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Schedule Appointment
+                  </button>
                 </div>
               </div>
 
@@ -262,9 +395,29 @@ const DoctorDashboard = () => {
                           }`}>
                             {patient.status}
                           </div>
-                          <button className="p-2 hover:bg-white/10 rounded-lg transition-colors duration-200">
+                          <div className="flex space-x-2">
+                            <button 
+                              onClick={() => handleViewPatient(patient)}
+                              className="p-2 hover:bg-white/10 rounded-lg transition-colors duration-200"
+                              title="View Patient Details"
+                            >
                             <Eye className="h-4 w-4 text-gray-400" />
                           </button>
+                            <button 
+                              onClick={() => handleAccessRecords(patient)}
+                              className="p-2 hover:bg-white/10 rounded-lg transition-colors duration-200"
+                              title="Access Records"
+                            >
+                              <FileText className="h-4 w-4 text-gray-400" />
+                            </button>
+                            <button 
+                              onClick={() => handleScheduleAppointment(patient)}
+                              className="p-2 hover:bg-white/10 rounded-lg transition-colors duration-200"
+                              title="Schedule Appointment"
+                            >
+                              <Calendar className="h-4 w-4 text-gray-400" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -398,25 +551,544 @@ const DoctorDashboard = () => {
                 <span>{verification.status==='approved' ? 'Verified' : 'Not verified'}</span>
               </div>
               <Protect level="green" label="Verification (demo)">
-                <div className="flex items-center gap-3">
-                  <input type="file" onChange={(e)=>setEvidenceFile(e.target.files?.[0])} className="text-sm" />
-                  <button onClick={async ()=>{
-                    if (!evidenceFile) return alert('Please select a file');
-                    setBusy(true);
-                    try {
-                      if (!demoMode) {
-                        await actor.request_doctor_verification('demo_evidence_cid');
-                      }
-                      setVerification({ status: 'pending' });
-                      alert('Verification evidence submitted (demo)');
-                    } finally { setBusy(false); }
-                  }} disabled={busy} className="inline-flex items-center px-3 py-1 bg-indigo-600 text-white rounded disabled:opacity-50"><Upload className="h-4 w-4 mr-1"/>{busy ? 'Submitting...' : 'Submit Evidence'}</button>
-                </div>
+                <button 
+                  onClick={handleVerification}
+                  className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors duration-200"
+                >
+                  <Upload className="h-4 w-4 mr-2"/>
+                  {verification.status === 'approved' ? 'Update Verification' : 'Submit Verification'}
+                </button>
               </Protect>
             </div>
           )}
         </motion.div>
       </div>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {/* Patient Search Modal */}
+        {showPatientSearchModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-8 rounded-2xl border border-white/20 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">Search Patient</h3>
+                <button
+                  onClick={() => setShowPatientSearchModal(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Search Type</label>
+                  <select
+                    value={patientSearchForm.searchType}
+                    onChange={(e) => setPatientSearchForm(prev => ({ ...prev, searchType: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-secondary-400"
+                  >
+                    <option value="name">Search by Name</option>
+                    <option value="email">Search by Email</option>
+                    <option value="id">Search by Patient ID</option>
+                  </select>
+                </div>
+
+                {patientSearchForm.searchType === 'name' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Patient Name</label>
+                    <input
+                      type="text"
+                      value={patientSearchForm.name}
+                      onChange={(e) => setPatientSearchForm(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-secondary-400"
+                      placeholder="Enter patient name"
+                    />
+                  </div>
+                )}
+
+                {patientSearchForm.searchType === 'email' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                    <input
+                      type="email"
+                      value={patientSearchForm.email}
+                      onChange={(e) => setPatientSearchForm(prev => ({ ...prev, email: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-secondary-400"
+                      placeholder="Enter email address"
+                    />
+                  </div>
+                )}
+
+                {patientSearchForm.searchType === 'id' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Patient ID</label>
+                    <input
+                      type="text"
+                      value={patientSearchForm.patientId}
+                      onChange={(e) => setPatientSearchForm(prev => ({ ...prev, patientId: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-secondary-400"
+                      placeholder="Enter patient ID"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex space-x-4 mt-8">
+                <button
+                  onClick={() => setShowPatientSearchModal(false)}
+                  className="flex-1 px-6 py-3 glass-card border border-gray-600 text-gray-300 font-semibold rounded-lg hover:bg-gray-800/50 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitPatientSearch}
+                  disabled={busy}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-secondary-500 to-primary-500 text-white font-semibold rounded-lg hover:from-secondary-600 hover:to-primary-600 transition-all duration-200 disabled:opacity-50"
+                >
+                  {busy ? 'Searching...' : 'Search Patient'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Patient Details Modal */}
+        {showPatientDetailsModal && selectedPatient && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-8 rounded-2xl border border-white/20 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">{selectedPatient.name}</h3>
+                <button
+                  onClick={() => setShowPatientDetailsModal(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <h4 className="text-lg font-semibold text-white mb-4">Patient Information</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm text-gray-400">Name</label>
+                      <p className="text-white">{selectedPatient.name}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Age</label>
+                      <p className="text-white">{selectedPatient.age} years</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Last Visit</label>
+                      <p className="text-white">{selectedPatient.lastVisit}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Condition</label>
+                      <p className="text-white">{selectedPatient.condition}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Status</label>
+                      <span className={`px-3 py-1 text-xs rounded-full ${
+                        selectedPatient.status === 'stable' 
+                          ? 'bg-accent-500/20 text-accent-400' 
+                          : selectedPatient.status === 'monitoring'
+                          ? 'bg-yellow-500/20 text-yellow-400'
+                          : 'bg-primary-500/20 text-primary-400'
+                      }`}>
+                        {selectedPatient.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-lg font-semibold text-white mb-4">Medical Records</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm text-gray-400">Records Shared</label>
+                      <p className="text-white">{selectedPatient.recordsShared || 0} records</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Access Level</label>
+                      <p className="text-white">Full Access</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-400">Last Updated</label>
+                      <p className="text-white">{selectedPatient.lastVisit}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex space-x-4">
+                <button
+                  onClick={() => setShowPatientDetailsModal(false)}
+                  className="flex-1 px-6 py-3 glass-card border border-gray-600 text-gray-300 font-semibold rounded-lg hover:bg-gray-800/50 transition-all duration-200"
+                >
+                  Close
+                </button>
+                <button 
+                  onClick={() => handleAccessRecords(selectedPatient)}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-secondary-500 to-primary-500 text-white font-semibold rounded-lg hover:from-secondary-600 hover:to-primary-600 transition-all duration-200"
+                >
+                  Access Records
+                </button>
+                <button 
+                  onClick={() => handleScheduleAppointment(selectedPatient)}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-lg hover:from-accent-600 hover:to-primary-600 transition-all duration-200"
+                >
+                  Schedule Appointment
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Record Access Modal */}
+        {showRecordAccessModal && selectedPatient && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-8 rounded-2xl border border-white/20 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">Access Patient Records - {selectedPatient.name}</h3>
+                <button
+                  onClick={() => setShowRecordAccessModal(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="p-4 bg-gray-800/50 rounded-lg">
+                  <h4 className="text-lg font-semibold text-white mb-2">Available Records</h4>
+                  <p className="text-gray-300 text-sm">{selectedPatient.recordsShared || 0} records available for access</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gray-800/50 p-4 rounded-lg">
+                    <FileText className="h-6 w-6 text-primary-400 mb-2" />
+                    <p className="text-sm font-medium text-white">Lab Results</p>
+                    <p className="text-xs text-gray-400">Latest: Jan 10, 2025</p>
+                    <button className="mt-2 px-3 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700 transition-colors duration-200">
+                      View
+                    </button>
+                  </div>
+                  <div className="bg-gray-800/50 p-4 rounded-lg">
+                    <Activity className="h-6 w-6 text-secondary-400 mb-2" />
+                    <p className="text-sm font-medium text-white">Vital Signs</p>
+                    <p className="text-xs text-gray-400">Latest: Jan 8, 2025</p>
+                    <button className="mt-2 px-3 py-1 bg-secondary-600 text-white rounded text-xs hover:bg-secondary-700 transition-colors duration-200">
+                      View
+                    </button>
+                  </div>
+                  <div className="bg-gray-800/50 p-4 rounded-lg">
+                    <Stethoscope className="h-6 w-6 text-accent-400 mb-2" />
+                    <p className="text-sm font-medium text-white">Clinical Notes</p>
+                    <p className="text-xs text-gray-400">Latest: Jan 5, 2025</p>
+                    <button className="mt-2 px-3 py-1 bg-accent-600 text-white rounded text-xs hover:bg-accent-700 transition-colors duration-200">
+                      View
+                    </button>
+                  </div>
+                  <div className="bg-gray-800/50 p-4 rounded-lg">
+                    <Shield className="h-6 w-6 text-neon-400 mb-2" />
+                    <p className="text-sm font-medium text-white">Imaging</p>
+                    <p className="text-xs text-gray-400">Latest: Jan 3, 2025</p>
+                    <button className="mt-2 px-3 py-1 bg-neon-600 text-white rounded text-xs hover:bg-neon-700 transition-colors duration-200">
+                      View
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex space-x-4 mt-8">
+                <button
+                  onClick={() => setShowRecordAccessModal(false)}
+                  className="flex-1 px-6 py-3 glass-card border border-gray-600 text-gray-300 font-semibold rounded-lg hover:bg-gray-800/50 transition-all duration-200"
+                >
+                  Close
+                </button>
+                <button className="flex-1 px-6 py-3 bg-gradient-to-r from-secondary-500 to-primary-500 text-white font-semibold rounded-lg hover:from-secondary-600 hover:to-primary-600 transition-all duration-200">
+                  Request Full Access
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Appointment Scheduling Modal */}
+        {showAppointmentModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-8 rounded-2xl border border-white/20 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">Schedule Appointment</h3>
+                <button
+                  onClick={() => setShowAppointmentModal(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Patient Name</label>
+                    <input
+                      type="text"
+                      value={appointmentForm.patientName}
+                      onChange={(e) => setAppointmentForm(prev => ({ ...prev, patientName: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
+                      placeholder="Enter patient name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Appointment Type</label>
+                    <select
+                      value={appointmentForm.type}
+                      onChange={(e) => setAppointmentForm(prev => ({ ...prev, type: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
+                    >
+                      <option value="">Select type</option>
+                      <option value="consultation">Consultation</option>
+                      <option value="follow-up">Follow-up</option>
+                      <option value="emergency">Emergency</option>
+                      <option value="routine">Routine Check-up</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Date</label>
+                    <input
+                      type="date"
+                      value={appointmentForm.date}
+                      onChange={(e) => setAppointmentForm(prev => ({ ...prev, date: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Time</label>
+                    <input
+                      type="time"
+                      value={appointmentForm.time}
+                      onChange={(e) => setAppointmentForm(prev => ({ ...prev, time: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Duration (minutes)</label>
+                    <select
+                      value={appointmentForm.duration}
+                      onChange={(e) => setAppointmentForm(prev => ({ ...prev, duration: Number(e.target.value) }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
+                    >
+                      <option value={15}>15 minutes</option>
+                      <option value={30}>30 minutes</option>
+                      <option value={45}>45 minutes</option>
+                      <option value={60}>60 minutes</option>
+                      <option value={90}>90 minutes</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Notes</label>
+                  <textarea
+                    value={appointmentForm.notes}
+                    onChange={(e) => setAppointmentForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400 h-24"
+                    placeholder="Add any notes about the appointment"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-4 mt-8">
+                <button
+                  onClick={() => setShowAppointmentModal(false)}
+                  className="flex-1 px-6 py-3 glass-card border border-gray-600 text-gray-300 font-semibold rounded-lg hover:bg-gray-800/50 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitAppointment}
+                  disabled={busy || !appointmentForm.patientName || !appointmentForm.date || !appointmentForm.time}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold rounded-lg hover:from-primary-600 hover:to-secondary-600 transition-all duration-200 disabled:opacity-50"
+                >
+                  {busy ? 'Scheduling...' : 'Schedule Appointment'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Doctor Verification Modal */}
+        {showVerificationModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card p-8 rounded-2xl border border-white/20 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">Doctor Verification</h3>
+                <button
+                  onClick={() => setShowVerificationModal(false)}
+                  className="p-2 hover:bg-gray-800 rounded-lg transition-colors duration-200"
+                >
+                  <X className="h-6 w-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Shield className="h-5 w-5 text-blue-400" />
+                    <h4 className="text-lg font-semibold text-blue-300">Verification Requirements</h4>
+                  </div>
+                  <p className="text-gray-300 text-sm">
+                    Please provide the following information to verify your medical credentials and gain access to patient records.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Medical License Number</label>
+                    <input
+                      type="text"
+                      value={verificationForm.licenseNumber}
+                      onChange={(e) => setVerificationForm(prev => ({ ...prev, licenseNumber: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
+                      placeholder="Enter license number"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Institution</label>
+                    <input
+                      type="text"
+                      value={verificationForm.institution}
+                      onChange={(e) => setVerificationForm(prev => ({ ...prev, institution: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
+                      placeholder="Hospital or clinic name"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Specialty</label>
+                    <select
+                      value={verificationForm.specialty}
+                      onChange={(e) => setVerificationForm(prev => ({ ...prev, specialty: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
+                    >
+                      <option value="">Select specialty</option>
+                      <option value="cardiology">Cardiology</option>
+                      <option value="neurology">Neurology</option>
+                      <option value="oncology">Oncology</option>
+                      <option value="pediatrics">Pediatrics</option>
+                      <option value="surgery">Surgery</option>
+                      <option value="internal-medicine">Internal Medicine</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Years of Experience</label>
+                    <input
+                      type="number"
+                      value={verificationForm.experience}
+                      onChange={(e) => setVerificationForm(prev => ({ ...prev, experience: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
+                      placeholder="Years"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Verification Evidence</label>
+                  <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center">
+                    <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-300 mb-2">Upload medical license or certification</p>
+                    <p className="text-gray-500 text-sm">Supports PDF, JPG, PNG files up to 10MB</p>
+                    <input
+                      type="file"
+                      onChange={(e) => setVerificationForm(prev => ({ ...prev, evidence: e.target.files?.[0] }))}
+                      className="mt-4 text-sm text-gray-300"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex space-x-4 mt-8">
+                <button
+                  onClick={() => setShowVerificationModal(false)}
+                  className="flex-1 px-6 py-3 glass-card border border-gray-600 text-gray-300 font-semibold rounded-lg hover:bg-gray-800/50 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitVerification}
+                  disabled={busy || !verificationForm.licenseNumber || !verificationForm.evidence}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold rounded-lg hover:from-primary-600 hover:to-secondary-600 transition-all duration-200 disabled:opacity-50"
+                >
+                  {busy ? 'Submitting...' : 'Submit Verification'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
