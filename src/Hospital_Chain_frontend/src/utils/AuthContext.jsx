@@ -8,7 +8,7 @@ const identityProvider =
   network === 'ic'
     ? 'https://identity.ic0.app'
     : 'http://uzt4z-lp777-77774-qaabq-cai.localhost:4943';
-
+     
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }) => {
       const identity = authClient.getIdentity();
       principal = identity.getPrincipal().toString();
       actor = createActor(canisterId, { agentOptions: { identity } });
-
+      console.log("actor setted as", actor);
       try {
         const userProfile = await actor.get_profile();
         // Fix: userProfile.role is now an array of roles
@@ -44,11 +44,12 @@ export const AuthProvider = ({ children }) => {
         currentRole = null; 
         try {
           // Automatically register as a patient.
-          await actor.register_user({ Patient: null });
-          currentRole = 'Patient';
+          // await actor.register_user({ Patient: null });
+          await actor.get_or_create_user_profile();
+          currentRole = ['Patient', 'Doctor', 'Researcher'];
         } catch (registerError) {
           console.error("Failed to register user:", registerError);
-          currentRole = null;
+        currentRole = null;
         }
       }
     }
@@ -85,9 +86,9 @@ export const AuthProvider = ({ children }) => {
   // New register function
   const registerUser = async (role) => {
     if (state.actor) {
-      await state.actor.register_user({ [role]: null });
-      checkAuthAndSetRole();
-    }
+              await state.actor.register_user({ [role]: null });
+        checkAuthAndSetRole();
+        }
   };
 
   return (

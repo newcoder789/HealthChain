@@ -16,12 +16,12 @@ const Patient = () => {
     try {
       if (!isAuthenticated) {
         await login();
-      } else if (userRole === 'None') {
+      // } else if (userRole === 'None') {
         await registerUser('Patient');
         await actor.get_profile().then((profile) => console.log(profile))
         navigate("/dashboard/patient");
       } else {
-        navigate("/dashboard/patient");
+        navigate("*");
       }
     } catch (err) {
       console.error("Error accessing patient dashboard:", err);

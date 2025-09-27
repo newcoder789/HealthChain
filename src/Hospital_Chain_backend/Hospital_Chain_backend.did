@@ -5,6 +5,35 @@ type AccessPermission = record {
   can_edit : bool;
   can_view : bool;
 };
+type AccessRequest = record {
+  request_id : text;
+  status : RequestStatus;
+  record_name : opt text;
+  requested_at : nat64;
+  message : text;
+  requester_name : opt text;
+  owner_principal : text;
+  record_id : text;
+  requester_principal : text;
+  resolved_at : opt nat64;
+};
+type ActiveShare = record {
+  grantee_name : opt text;
+  permissions : AccessPermission;
+  record_name : opt text;
+  grantee_principal : text;
+  record_id : text;
+  grant_id : text;
+};
+type AuditLogEntry = record {
+  id : nat64;
+  action : text;
+  actor : text;
+  meta_cid : opt text;
+  target : opt text;
+  timestamp : nat64;
+  record_id : opt text;
+};
 type EncryptedKeyForPrincipal = record {
   encrypted_key : blob;
   principal_text : text;
@@ -36,11 +65,17 @@ type PrivacySettings = record {
   auto_expire_days : opt nat32;
   show_public_stats : bool;
   allowed_data_regions : vec text;
+  email_updates : bool;
   default_sharing_scope : opt SharingScope;
+  security_alerts : bool;
+  analytics : bool;
   custom_prefs : opt vec record { text; text };
   watermark_on_view : bool;
   require_manual_approval : bool;
+  research_updates : bool;
+  access_alerts : bool;
   allow_research_use : bool;
+  profile_visibility : text;
   notify_on_access : bool;
 };
 type PublicStats = record {
@@ -50,11 +85,25 @@ type PublicStats = record {
   age_band : opt text;
   record_count : nat32;
 };
+type RequestStatus = variant { Approved; Denied; Pending };
 type Result = variant { Ok : text; Err : text };
-type Result_1 = variant { Ok : vec MedicalRecord; Err : text };
-type Result_2 = variant { Ok : principal; Err : text };
-type Result_3 = variant { Ok : User; Err : text };
-type Result_4 = variant { Ok; Err : text };
+type Result_1 = variant { Ok; Err : text };
+type Result_10 = variant { Ok : PrivacySettings; Err : text };
+type Result_11 = variant { Ok : vec SharedRecordInfo; Err : text };
+type Result_2 = variant { Ok : record { nat64; nat64; nat64 }; Err : text };
+type Result_3 = variant { Ok : vec ActiveShare; Err : text };
+type Result_4 = variant { Ok : vec AuditLogEntry; Err : text };
+type Result_5 = variant { Ok : vec MedicalRecord; Err : text };
+type Result_6 = variant { Ok : vec AccessRequest; Err : text };
+type Result_7 = variant { Ok : vec User; Err : text };
+type Result_8 = variant { Ok : principal; Err : text };
+type Result_9 = variant { Ok : User; Err : text };
+type Sex = variant { Male; Female; Other };
+type SharedRecordInfo = record {
+  owner_is_verified : bool;
+  owner_name : opt text;
+  "record" : MedicalRecord;
+};
 type SharingScope = variant { TrustedDoctors; Private; PublicAnonymized };
 type User = record {
   records : vec text;
@@ -79,9 +128,15 @@ type User = record {
   profile : opt UserProfile;
 };
 type UserProfile = record {
+  age : opt text;
   bio : opt text;
+  sex : opt Sex;
   avatar_cid : opt text;
   meta : opt vec record { text; text };
+  name : opt text;
+  nationality : opt text;
+  email : opt text;
+  ethnicity : opt text;
   phone_hash : opt text;
 };
 type UserRole = variant { Doctor; Researcher; Admin; Patient };
@@ -96,17 +151,32 @@ type VerificationBadge = record {
 type VerificationEvidence = record { evidence_cid : text; uploaded_at : nat64 };
 type VerifiedTier = variant { Basic; Verified };
 service : () -> {
+  add_admin : (principal) -> (Result);
   add_user_role : (UserRole) -> (Result);
+  approve_access_request : (text) -> (Result_1);
+  approve_identity : (principal) -> (Result_1);
   create_folder : (text, opt text) -> (Result);
-  get_my_records : () -> (Result_1) query;
-  get_principal_by_name : (text) -> (Result_2) query;
-  get_profile : () -> (Result_3) query;
-  grant_access : (text, principal, AccessPermission) -> (Result_4);
-  register_user : (UserRole) -> (Result);
-  revoke_access : (text, principal) -> (Result_4);
-  shared_with_me : () -> (Result_1) query;
-  submit_for_research : (text) -> (Result_4);
-  update_settings : () -> (Result_4);
+  deny_access_request : (text) -> (Result_1);
+  get_dashboard_stats : () -> (Result_2) query;
+  get_my_active_shares : () -> (Result_3) query;
+  get_my_audit_log : () -> (Result_4) query;
+  get_my_records : () -> (Result_5) query;
+  get_my_sent_requests : () -> (Result_6) query;
+  get_or_create_user_profile : () -> (User);
+  get_pending_requests : () -> (Result_6) query;
+  get_pending_verifications : () -> (Result_7) query;
+  get_principal_by_name : (text) -> (Result_8) query;
+  get_profile : () -> (Result_9) query;
+  get_settings : () -> (Result_10) query;
+  grant_access : (text, principal, AccessPermission) -> (Result_1);
+  request_access_to_record : (text, text) -> (Result);
+  revoke_access : (text, principal) -> (Result_1);
+  search_patients_by_name : (text) -> (Result_7) query;
+  shared_with_me : () -> (Result_11) query;
+  submit_for_research : (text) -> (Result_1);
+  submit_identity_verification : (text) -> (Result_1);
+  update_profile : (UserProfile) -> (Result);
+  update_settings : (PrivacySettings) -> (Result_1);
   update_user_name : (text) -> (Result);
-  upload_record : (text, text, text, opt text) -> (Result);
+  upload_record : (text, text, text, opt text, nat64) -> (Result);
 }

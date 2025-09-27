@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, CheckCircle, Folder, File, FileText, FileImage, Download, ArrowLeft, SortAsc, SortDesc, Share2, Clock, Eye, Plus, Users, Shield, Calendar, UserPlus, Edit3, Trash2, Send, Copy, Check } from 'lucide-react';
+import { Upload, X, CheckCircle, Folder, File, FileText, FileImage, Download, ArrowLeft, SortAsc, SortDesc, Share2, Clock, Eye, Plus, Users, Shield, Calendar, UserPlus, Edit3, Trash2, Send, Copy, Check, Save } from 'lucide-react';
 import { useAuth } from '../utils/AuthContext';
-import { useDemo } from '../utils/DemoContext';
-import { TokenService } from '../utils/TokenService';
 import { Protect } from '../components/DeveloperOverlay';
 import { uploadFileToIPFS, getIPFSFile, unpinFileFromIPFS } from '../utils/IPFSHandler';
 import { mlClient } from '../utils/mlClient';
@@ -16,7 +14,7 @@ const PatientDashboard = () => {
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingUpload, setLoadingUpload] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
   const hasFetchedRef = useRef(false);
   const [toast, setToast] = useState(null);
   const [myRecords, setMyRecords] = useState([]);
@@ -27,14 +25,19 @@ const PatientDashboard = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedRecordToShare, setSelectedRecordToShare] = useState(null);
   const [sortedRecords, setSortedRecords] = useState([]);
-  const { demoMode } = useDemo();
-  const [displayName, setDisplayName] = useState('Aryan Dixit');
-  const [walletBalance, setWalletBalance] = useState(0);
+  const [displayName, setDisplayName] = useState('');
   const [bounties, setBounties] = useState([]);
   const [consented, setConsented] = useState({});
   const [qualityByRecordId, setQualityByRecordId] = useState({});
   
   // New sharing states
+  const [dashboardStats, setDashboardStats] = useState({
+    activeShares: 0,
+    recentViews: 0,
+    storageUsed: 0,
+  });
+  const [auditLogs, setAuditLogs] = useState([]);
+
   const [showShareRecordModal, setShowShareRecordModal] = useState(false);
   const [showShareWithDoctorModal, setShowShareWithDoctorModal] = useState(false);
   const [showAccessRequestModal, setShowAccessRequestModal] = useState(false);
@@ -48,28 +51,24 @@ const PatientDashboard = () => {
     records: []
   });
   const [accessRequests, setAccessRequests] = useState([]);
-  const [sharedAccess, setSharedAccess] = useState([
-    {
-      id: 1,
-      doctor: 'Dr. Sarah Smith',
-      specialty: 'Cardiology',
-      accessLevel: 'Full Access',
-      expiry: '2025-06-10',
-      recordsShared: 5,
-      permissions: ['view', 'download', 'comment'],
-      status: 'active'
-    },
-    {
-      id: 2,
-      doctor: 'Dr. Mike Johnson',
-      specialty: 'Internal Medicine',
-      accessLevel: 'Limited Access',
-      expiry: '2025-03-15',
-      recordsShared: 2,
-      permissions: ['view'],
-      status: 'active'
-    }
-  ]);
+  const [privacySettings, setPrivacySettings] = useState({
+    allow_research_use: false,
+    show_public_stats: false,
+    default_sharing_scope: null,
+    require_manual_approval: false,
+    watermark_on_view: false,
+    auto_expire_days: null,
+    notify_on_access: false,
+    allowed_data_regions: [],
+    custom_prefs: null,
+    email_updates: true,
+    access_alerts: true,
+    security_alerts: true,
+    research_updates: false,
+    profile_visibility: "private",
+    analytics: true,
+  });
+  const [sharedAccess, setSharedAccess] = useState([]);
 
   const handleToast = (message, type) => {
     setToast({ message, type });
@@ -93,41 +92,42 @@ const PatientDashboard = () => {
   const handleSubmitShare = async () => {
     setLoading(true);
     try {
-      // Simulate sharing process
-      const newShare = {
-        id: Date.now(),
-        doctor: shareForm.doctorName,
-        specialty: 'General Medicine',
-        accessLevel: shareForm.permissions.includes('download') ? 'Full Access' : 'Limited Access',
-        expiry: new Date(Date.now() + parseInt(shareForm.duration) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        recordsShared: shareForm.records.length,
-        permissions: shareForm.permissions,
-        status: 'active'
+      const principalRes = await actor.get_principal_by_name(shareForm.doctorName);
+      if (principalRes.Err) {
+        throw new Error(principalRes.Err);
+      }
+      const toPrincipal = principalRes.Ok;
+
+      const permissions = {
+        can_view: shareForm.permissions.includes('view'),
+        can_edit: shareForm.permissions.includes('edit') || shareForm.permissions.includes('comment'), // 'edit' or 'comment' implies edit rights
+        can_share: false, // Sharing by proxy is a complex feature, disabling for now.
+        is_anonymized: false, // This should be a separate option in the UI
+        expiry: [BigInt(Date.now() + parseInt(shareForm.duration) * 24 * 60 * 60 * 1000) * 1_000_000n],
       };
-      
-      setSharedAccess(prev => [...prev, newShare]);
+
+      for (const recordId of shareForm.records) {
+        await actor.grant_access(recordId, toPrincipal, permissions);
+      }
       handleToast(`Successfully shared ${shareForm.records.length} record(s) with ${shareForm.doctorName}`, 'success');
-      
-      setShareForm({
-        doctorEmail: '',
-        doctorName: '',
-        duration: '30',
-        permissions: ['view'],
-        message: '',
-        records: []
-      });
       setShowShareRecordModal(false);
       setShowShareWithDoctorModal(false);
     } catch (error) {
-      handleToast('Failed to share records. Please try again.', 'error');
+      handleToast(`Failed to share records: ${error.message || 'Please try again.'}`, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRevokeAccess = (shareId) => {
-    setSharedAccess(prev => prev.filter(share => share.id !== shareId));
-    handleToast('Access revoked successfully', 'success');
+  const handleRevokeAccess = async (share) => {
+    try {
+      const principalToRevoke = await actor.get_principal_by_name(share.grantee_name[0]);
+      await actor.revoke_access(share.record_id, principalToRevoke.Ok);
+      setSharedAccess(prev => prev.filter(s => s.grant_id !== share.grant_id));
+      handleToast('Access revoked successfully', 'success');
+    } catch (error) {
+      handleToast(`Failed to revoke access: ${error.message || error}`, 'error');
+    }
   };
 
   const handleRequestAccess = () => {
@@ -136,19 +136,11 @@ const PatientDashboard = () => {
 
   const handleSubmitAccessRequest = async () => {
     setLoading(true);
+    // This modal is for a doctor requesting access, which is not the patient's role.
+    // We will implement the patient's view of incoming requests.
+    // For now, this button can be considered a placeholder for a doctor's dashboard.
     try {
-      // Simulate access request
-      const newRequest = {
-        id: Date.now(),
-        doctor: 'Dr. New Doctor',
-        specialty: 'Requested Specialty',
-        status: 'pending',
-        requestedAt: new Date().toISOString(),
-        message: 'Requesting access to medical records for consultation'
-      };
-      
-      setAccessRequests(prev => [...prev, newRequest]);
-      handleToast('Access request sent successfully', 'success');
+      handleToast('This feature is for doctors to request access.', 'info');
       setShowAccessRequestModal(false);
     } catch (error) {
       handleToast('Failed to send access request', 'error');
@@ -157,33 +149,52 @@ const PatientDashboard = () => {
     }
   };
 
-  const handleApproveRequest = (requestId) => {
-    setAccessRequests(prev => prev.filter(req => req.id !== requestId));
-    handleToast('Access request approved', 'success');
+  const handleApproveRequest = async (requestId) => {
+    try {
+      await actor.approve_access_request(requestId);
+      setAccessRequests(prev => prev.filter(req => req.request_id !== requestId));
+      handleToast('Access request approved', 'success');
+    } catch (error) {
+      handleToast(`Failed to approve request: ${error.message || error}`, 'error');
+    }
   };
 
-  const handleDenyRequest = (requestId) => {
-    setAccessRequests(prev => prev.filter(req => req.id !== requestId));
-    handleToast('Access request denied', 'success');
+  const handleDenyRequest = async (requestId) => {
+    try {
+      await actor.deny_access_request(requestId);
+      setAccessRequests(prev => prev.filter(req => req.request_id !== requestId));
+      handleToast('Access request denied', 'success');
+    } catch (error) {
+      handleToast(`Failed to deny request: ${error.message || error}`, 'error');
+    }
   };
 
-  // Privacy and settings handlers
-  const handlePrivacyToggle = (setting) => {
-    handleToast(`${setting} setting updated`, 'success');
+  const handleSettingsChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setPrivacySettings(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
   };
 
-  const handleDataRetentionUpdate = (days) => {
-    handleToast(`Data retention policy updated to ${days} days`, 'success');
+  const handleSaveSettings = async () => {
+    try {
+      const settingsUpdate = {
+        ...privacySettings,
+        auto_expire_days: privacySettings.auto_expire_days
+          ? [Number(privacySettings.auto_expire_days)]
+          : [],
+        default_sharing_scope: privacySettings.default_sharing_scope
+          ? [privacySettings.default_sharing_scope]
+          : [],
+        custom_prefs: privacySettings.custom_prefs ? [privacySettings.custom_prefs] : [],
+      };
+      await actor.update_settings(settingsUpdate);
+      handleToast('Privacy settings updated successfully', 'success');
+    } catch (error) {
+      handleToast(`Failed to update settings: ${error.message || error}`, 'error');
+    }
   };
-
-  const handleEncryptionToggle = () => {
-    handleToast('End-to-end encryption toggled', 'success');
-  };
-
-  const handleNotificationToggle = (type) => {
-    handleToast(`${type} notifications updated`, 'success');
-  };
-
   const handleExportData = () => {
     handleToast('Data export initiated. You will receive an email when ready.', 'success');
   };
@@ -196,6 +207,7 @@ const PatientDashboard = () => {
 
   const fetchRecords = useCallback(async () => {
     setLoading(true);
+    setIsInitialLoading(true);
     try {
       const result = await actor.get_my_records();
       if (result.Ok) {
@@ -206,13 +218,12 @@ const PatientDashboard = () => {
         console.log("Result ",result);
         handleToast(`Error fetching records: ${result.Err}`, 'error');
       }
-      if (userRole === 'Doctor' || userRole === 'Researcher') {
-        const result = await actor.shared_with_me();
-        if (result.Ok) {
-          setSharedRecords(result.Ok);
-        } else {
-          handleToast(`Error fetching shared records: ${result.Err}`, 'error');
-        }
+      // Since all roles are granted in dev, we can fetch shared records for everyone.
+      const sharedResult = await actor.shared_with_me();
+      if (sharedResult.Ok) {
+        setSharedRecords(sharedResult.Ok);
+      } else {
+        handleToast(`Error fetching shared records: ${sharedResult.Err}`, 'error');
       }
     } catch (error) {
       handleToast(`Failed to fetch records: ${error}`, 'error');
@@ -234,19 +245,44 @@ const PatientDashboard = () => {
     if (isAuthenticated && actor && !hasFetchedRef.current) {
       hasFetchedRef.current = true;
       console.log("Actor present, fetching records once", actor);
+
+      const fetchDashboardData = async () => {
+        const profileRes = await actor.get_profile();
+        if (profileRes.Ok) {
+          setDisplayName(profileRes.Ok.name?.[0] || 'Unnamed User');
+        }
+
+        // Fetch dashboard stats
+        const statsRes = await actor.get_dashboard_stats();
+        if (statsRes.Ok) {
+          const [activeShares, recentViews, storageUsed] = statsRes.Ok;
+          setDashboardStats({ activeShares: Number(activeShares), recentViews: Number(recentViews), storageUsed: Number(storageUsed) });
+        }
+
+        // Fetch active shares list
+        const sharesRes = await actor.get_my_active_shares();
+        if (sharesRes.Ok) {
+          setSharedAccess(sharesRes.Ok);
+        }
+
+        // Fetch privacy settings
+        const settingsRes = await actor.get_settings();
+        if (settingsRes.Ok) {
+          setPrivacySettings(prev => ({ ...prev, ...settingsRes.Ok }));
+        }
+
+        // Fetch pending access requests for the user
+        const requestsRes = await actor.get_pending_requests();
+        if (requestsRes.Ok) {
+          setAccessRequests(requestsRes.Ok);
+        }
+      };
       fetchRecords();
-      try {
-        const b = TokenService.getBounties();
-        setBounties(b);
-      } catch (e) {}
-      try {
-        setWalletBalance(TokenService.getBalance(displayName));
-      } catch (e) {}
+      fetchDashboardData();
     }
   }, [isAuthenticated, actor, fetchRecords]);
 
   useEffect(() => {
-    // Update sortedRecords when myRecords or currentFolder changes
     const filteredRecords = myRecords.length > 0
       ? (currentFolder
         ? myRecords.filter(record => record.parent_folder_id.includes(currentFolder.record_id))
@@ -261,41 +297,47 @@ const PatientDashboard = () => {
     }
   }, [myRecords, currentFolder, sortBy, sortOrder]);
 
-  const handleUpload = async (file, file_type, file_name, parentId) => {
+  const handleUpload = async (files, file_type, year, parentId) => {
     setLoadingUpload(true);
-    let cid = null;
     try {
-      console.log("Step 1: Attempting to upload file to IPFS...");
-      cid = await uploadFileToIPFS(file);
-      console.log("Step 2: Successful upload to IPFS. CID is:", cid);
+      for (const file of files) {
+        let cid = null;
+        try {
+          console.log("Step 1: Attempting to upload file to IPFS...", file.name);
+          cid = await uploadFileToIPFS(file);
+          console.log("Step 2: Successful upload to IPFS. CID is:", cid);
 
-      console.log("Step 3: Attempting to upload record to canister with CID...");
-      await actor.upload_record(cid, file_type, file_name, parentId);
-      console.log("Step 4: Record uploaded successfully to canister!");
+          // For organization, append year to file name if provided
+          const fileName = year ? `${file.name} (${year})` : file.name;
 
-      handleToast(`Record "${file_name}" uploaded successfully!`, 'success');
-      await fetchRecords();
+          console.log("Step 3: Attempting to upload record to canister with CID...");
+          await actor.upload_record(cid, file_type, fileName, parentId, file.size);
+          console.log("Step 4: Record uploaded successfully to canister!");
 
-      // Find the newly uploaded record and run quality check via ML
-      try {
-        const uploaded = myRecords.find(r => r.file_name === file_name) || null;
-        const inputUri = `ipfs://${cid}`;
-        const job = await mlClient.createJob({ type: 'quality', input_uri: inputUri, consent_token: 'demo-consent' });
-        const final = await mlClient.pollJob(job.id, { intervalMs: 1000, maxMs: 15000 });
-        if (final.status === 'succeeded') {
-          setQualityByRecordId(prev => ({ ...prev, [uploaded?.record_id || cid]: { score: 0.92, reportUri: final.artifacts?.quality_report_uri } }));
+          handleToast(`Record "${fileName}" uploaded successfully!`, 'success');
+
+          // Find the newly uploaded record and run quality check via ML
+          try {
+            const uploaded = myRecords.find(r => r.file_name === fileName) || null;
+            const inputUri = `ipfs://${cid}`;
+            const job = await mlClient.createJob({ type: 'quality', input_uri: inputUri, consent_token: 'demo-consent' });
+            const final = await mlClient.pollJob(job.id, { intervalMs: 1000, maxMs: 15000 });
+            if (final.status === 'succeeded') {
+              setQualityByRecordId(prev => ({ ...prev, [uploaded?.record_id || cid]: { score: 0.92, reportUri: final.artifacts?.quality_report_uri } }));
+            }
+          } catch (e) {
+            console.warn('Quality check failed', e);
+            handleToast('Quality service unavailable right now. Try later.', 'error');
+          }
+        } catch (error) {
+          console.error("Critical error during upload:", error);
+          handleToast(`Upload failed for ${file.name}: ${error.message || error}`, 'error');
+          if (cid) {
+            await unpinFileFromIPFS(cid);
+          }
         }
-      } catch (e) {
-        console.warn('Quality check failed', e);
-        handleToast('Quality service unavailable right now. Try later.', 'error');
       }
-    } catch (error) {
-      // This will now show us the exact error from the canister or IPFS.
-      console.error("Critical error during upload:", error);
-      handleToast(`Upload failed: ${error.message || error}`, 'error');
-      if (cid) {
-        await unpinFileFromIPFS(cid);
-      }
+      await fetchRecords();
     } finally {
       setLoadingUpload(false);
       setShowUploadModal(false);
@@ -347,17 +389,8 @@ const PatientDashboard = () => {
   };
 
   const handleConsent = (bountyId) => {
-    try {
-      TokenService.consentToBounty(bountyId, displayName);
-      setConsented(prev => ({ ...prev, [bountyId]: true }));
-    } catch (e) {}
-  };
-
-  const handleRevoke = (bountyId) => {
-    try {
-      TokenService.revokeConsent(bountyId, displayName);
-      setConsented(prev => ({ ...prev, [bountyId]: false }));
-    } catch (e) {}
+    // Placeholder for real bounty consent logic
+    handleToast('Bounty and token features are not yet implemented.', 'info');
   };
 
   const sortRecords = (records) => {
@@ -414,10 +447,10 @@ const PatientDashboard = () => {
       <div className="space-x-2">
         {record.file_type !== 'folder' && (
           <>
-            <button onClick={() => handleView(record.file_hash)} className="bg-primary hover:bg-primary-dark text-white text-sm px-3 py-1 rounded-full">
+            <button onClick={() => handleView(record.file_cid)} className="bg-primary hover:bg-primary-dark text-white text-sm px-3 py-1 rounded-full">
               View
             </button>
-            <button onClick={() => handleDownload(record.file_hash, record.file_name)} className="bg-gray-600 hover:bg-gray-700 text-white text-sm px-3 py-1 rounded-full">
+            <button onClick={() => handleDownload(record.file_cid, record.file_name)} className="bg-gray-600 hover:bg-gray-700 text-white text-sm px-3 py-1 rounded-full">
               <Download size={16} />
             </button>
           </>
@@ -434,45 +467,39 @@ const PatientDashboard = () => {
     { id: 'privacy', name: 'Privacy', icon: Shield }
   ];
 
-  const mockSharedAccess = [
-    {
-      doctor: 'Dr. Sarah Smith',
-      specialty: 'Cardiology',
-      accessLevel: 'Full Access',
-      expiry: '2025-06-10',
-      recordsShared: 5
-    },
-    {
-      doctor: 'Dr. Mike Johnson',
-      specialty: 'Internal Medicine',
-      accessLevel: 'Limited Access',
-      expiry: '2025-03-15',
-      recordsShared: 2
-    }
-  ];
-
   const AuditLogTable = () => {
-    // You would fetch audit logs here
-    const mockAuditLogs = [
-      { id: 1, action: 'Record uploaded', user: 'self', timestamp: '2025-09-14 10:00 AM' },
-      { id: 2, action: 'Access granted', user: 'Dr. Smith', timestamp: '2025-09-14 10:05 AM' },
-    ];
+    useEffect(() => {
+      if (activeTab === 'audit' && actor) {
+        const fetchAuditLogs = async () => {
+          const res = await actor.get_my_audit_log();
+          if (res.Ok) {
+            setAuditLogs(res.Ok);
+          } else {
+            handleToast('Failed to fetch audit logs.', 'error');
+          }
+        };
+        fetchAuditLogs();
+      }
+    }, [activeTab, actor]);
+
     return (
       <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
         <table className="w-full text-left text-gray-300">
           <thead>
             <tr className="border-b border-gray-600">
               <th className="py-2">Action</th>
-              <th className="py-2">User</th>
+              <th className="py-2">Actor</th>
+              <th className="py-2">Target</th>
               <th className="py-2">Timestamp</th>
             </tr>
           </thead>
           <tbody>
-            {mockAuditLogs.map(log => (
+            {auditLogs.map(log => (
               <tr key={log.id} className="border-b border-gray-800 last:border-b-0">
                 <td className="py-2">{log.action}</td>
-                <td className="py-2">{log.user}</td>
-                <td className="py-2">{log.timestamp}</td>
+                <td className="py-2 font-mono text-xs truncate" title={log.actor}>{log.actor.substring(0, 15)}...</td>
+                <td className="py-2 font-mono text-xs truncate" title={log.target.join('')}>{log.target.join('') ? `${log.target.join('').substring(0, 15)}...` : 'N/A'}</td>
+                <td className="py-2">{new Date(Number(log.timestamp / 1_000_000n)).toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
@@ -534,7 +561,7 @@ const PatientDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm">Active Shares</p>
-                <p className="text-2xl font-bold text-white">{mockSharedAccess.length}</p>
+                <p className="text-2xl font-bold text-white">{dashboardStats.activeShares}</p>
               </div>
               <Share2 className="h-8 w-8 text-secondary-400" />
             </div>
@@ -549,7 +576,7 @@ const PatientDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm">Recent Views</p>
-                <p className="text-2xl font-bold text-white">7</p>
+                <p className="text-2xl font-bold text-white">{dashboardStats.recentViews}</p>
               </div>
               <Eye className="h-8 w-8 text-accent-400" />
             </div>
@@ -564,22 +591,9 @@ const PatientDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm">Storage Used</p>
-                <p className="text-2xl font-bold text-white">19.3 MB</p>
+                <p className="text-2xl font-bold text-white">{(dashboardStats.storageUsed / 1024 / 1024).toFixed(2)} MB</p>
               </div>
               <Upload className="h-8 w-8 text-neon-400" />
-            </div>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5, delay: 0.35 }}
-            className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/60 to-indigo-800/60 shadow-lg"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-sm">HCT Balance</p>
-                <p className="text-2xl font-bold text-white">{walletBalance} HCT</p>
-              </div>
             </div>
           </motion.div>
         </div>
@@ -595,11 +609,7 @@ const PatientDashboard = () => {
                   <div className="text-xs text-gray-500">Tags: {(b.tags||[]).join(', ')}</div>
                 </div>
                 <div className="flex gap-2">
-                  {!consented[b.id] ? (
-                    <button onClick={() => handleConsent(b.id)} className="px-4 py-2 bg-emerald-600 text-white rounded">Consent</button>
-                  ) : (
-                    <button onClick={() => handleRevoke(b.id)} className="px-4 py-2 bg-rose-600 text-white rounded">Revoke</button>
-                  )}
+                  <button onClick={() => handleConsent(b.id)} className="px-4 py-2 bg-emerald-600 text-white rounded">Consent</button>
                 </div>
               </div>
             ))}
@@ -678,7 +688,7 @@ const PatientDashboard = () => {
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4">
-                {isInitialLoading && (
+                {isInitialLoading  && (
                   <>
                     {Array.from({ length: 3 }).map((_, i) => (
                       <div key={i} className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/50 to-indigo-800/50 animate-pulse">
@@ -713,7 +723,7 @@ const PatientDashboard = () => {
                         setCurrentFolder(record);
                         filterRecords(record.record_id);
                       } else {
-                        handleView(record.file_hash);
+                        handleView(record.file_cid);
                       }
                     }}
                   >
@@ -763,10 +773,10 @@ const PatientDashboard = () => {
                       <div className="flex items-center space-x-3">
                         {record.file_type !== 'folder' && (
                           <>
-                            <button onClick={() => handleView(record.file_hash)} className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200">
+                            <button onClick={() => handleView(record.file_cid)} className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200">
                               <Eye className="h-4 w-4 text-cyan-300" />
                             </button>
-                            <button onClick={() => handleDownload(record.file_hash, record.file_name)} className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200">
+                            <button onClick={() => handleDownload(record.file_cid, record.file_name)} className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200">
                               <Download className="h-4 w-4 text-cyan-300" />
                             </button>
                           </>
@@ -819,9 +829,9 @@ const PatientDashboard = () => {
                     onClick={handleShareWithDoctor}
                     className="inline-flex items-center px-6 py-3 glass-card border border-primary-400/50 text-primary-400 font-semibold rounded-lg hover:bg-primary-400/10 transition-all duration-200"
                   >
-                    <Users className="h-4 w-4 mr-2" />
-                    Share with Doctor
-                  </button>
+                  <Users className="h-4 w-4 mr-2" />
+                  Share with Doctor
+                </button>
                   <button 
                     onClick={handleRequestAccess}
                     className="inline-flex items-center px-6 py-3 glass-card border border-accent-400/50 text-accent-400 font-semibold rounded-lg hover:bg-accent-400/10 transition-all duration-200"
@@ -829,13 +839,13 @@ const PatientDashboard = () => {
                     <UserPlus className="h-4 w-4 mr-2" />
                     Request Access
                   </button>
-                </div>
+              </div>
               </div>
 
               {/* Active Shares */}
               <div className="mb-8">
                 <h3 className="text-lg font-semibold text-gray-200 mb-4">Active Shares</h3>
-                <div className="space-y-4">
+              <div className="space-y-4">
                   {loading && sharedAccess.length === 0 && (
                     <>
                       {Array.from({ length: 2 }).map((_, i) => (
@@ -857,57 +867,66 @@ const PatientDashboard = () => {
                       ))}
                     </>
                   )}
-                  {sharedAccess.map((share, index) => (
-                    <motion.div
+                  {sharedAccess.length > 0 ? sharedAccess.map((share, index) => (
+                  <motion.div
                       key={share.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.5, delay: index * 0.1 }}
-                      className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-indigo-900/70 to-blue-800/70 shadow-lg"
-                    >
-                      <div className="flex items-center justify-between">
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                    className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-indigo-900/70 to-blue-800/70 shadow-lg"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center shadow-md">
+                          <Users className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-200">{share.grantee_name.join('') || 'Unnamed User'}</h3>
+                          <p className="text-sm text-gray-400">Record: {share.record_name.join('') || 'Unnamed Record'}</p>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {share.permissions.can_view && <span className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded">View</span>}
+                              {share.permissions.can_edit && <span className="px-2 py-1 bg-yellow-500/20 text-yellow-300 text-xs rounded">Edit</span>}
+                              {share.permissions.can_share && <span className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded">Share</span>}
+                            </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
                         <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center shadow-md">
-                            <Users className="h-6 w-6 text-white" />
+                          <div>
+                            <p className="text-sm font-medium text-gray-200">
+                              {share.permissions.can_edit ? 'Full Access' : 'View Only'}
+                            </p>
+                            <p className="text-xs text-gray-400">1 record shared</p>
                           </div>
                           <div>
-                            <h3 className="text-lg font-semibold text-gray-200">{share.doctor}</h3>
-                            <p className="text-sm text-gray-400">{share.specialty}</p>
-                            <div className="flex items-center space-x-2 mt-1">
-                              {share.permissions.map((permission, idx) => (
-                                <span key={idx} className="px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded">
-                                  {permission}
-                                </span>
-                              ))}
-                            </div>
+                            <p className="text-sm text-gray-400">Expires</p>
+                            <p className="text-sm font-medium text-gray-200">
+                              {share.permissions.expiry.length > 0 
+                                ? new Date(Number(share.permissions.expiry[0] / 1_000_000n)).toLocaleDateString() 
+                                : 'Never'}
+                            </p>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="flex items-center space-x-4">
-                            <div>
-                              <p className="text-sm font-medium text-gray-200">{share.accessLevel}</p>
-                              <p className="text-xs text-gray-400">{share.recordsShared} records shared</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-400">Expires</p>
-                              <p className="text-sm font-medium text-gray-200">{share.expiry}</p>
-                            </div>
                             <div className="flex space-x-2">
                               <button 
-                                onClick={() => handleRevokeAccess(share.id)}
+                                onClick={() => handleRevokeAccess(share)}
                                 className="px-4 py-2 bg-gradient-to-r from-rose-500/80 to-pink-500/80 text-white rounded-lg hover:from-rose-600 hover:to-pink-600 transition-all duration-200 shadow"
                               >
-                                Revoke
-                              </button>
+                            Revoke
+                          </button>
                               <button className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all duration-200">
                                 <Edit3 className="h-4 w-4" />
                               </button>
                             </div>
-                          </div>
+                        </div>
                         </div>
                       </div>
                     </motion.div>
-                  ))}
+                  )) : (
+                    <div className="text-center py-8 glass-card rounded-xl">
+                      <p className="text-gray-400">You haven't shared any records yet.</p>
+                    </div>
+                  )
+                }
                 </div>
               </div>
 
@@ -916,9 +935,9 @@ const PatientDashboard = () => {
                 <div className="mb-8">
                   <h3 className="text-lg font-semibold text-gray-200 mb-4">Pending Access Requests</h3>
                   <div className="space-y-4">
-                    {accessRequests.map((request, index) => (
+                    {accessRequests.map((req, index) => (
                       <motion.div
-                        key={request.id}
+                        key={req.request_id}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.5, delay: index * 0.1 }}
@@ -930,31 +949,31 @@ const PatientDashboard = () => {
                               <UserPlus className="h-6 w-6 text-white" />
                             </div>
                             <div>
-                              <h3 className="text-lg font-semibold text-gray-200">{request.doctor}</h3>
-                              <p className="text-sm text-gray-400">{request.specialty}</p>
-                              <p className="text-xs text-gray-500 mt-1">{request.message}</p>
+                              <h3 className="text-lg font-semibold text-gray-200">{req.requester_name.join('') || 'Unnamed User'}</h3>
+                              <p className="text-sm text-gray-400">Record: {req.record_name.join('') || 'Unnamed Record'}</p>
+                              <p className="text-xs text-gray-500 mt-1">{req.message}</p>
                             </div>
                           </div>
                           <div className="flex space-x-2">
                             <button 
-                              onClick={() => handleApproveRequest(request.id)}
+                              onClick={() => handleApproveRequest(req.request_id)}
                               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-200"
                             >
                               <Check className="h-4 w-4 mr-1" />
                               Approve
                             </button>
                             <button 
-                              onClick={() => handleDenyRequest(request.id)}
+                              onClick={() => handleDenyRequest(req.request_id)}
                               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200"
                             >
                               <X className="h-4 w-4 mr-1" />
                               Deny
                             </button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
                 </div>
               )}
             </div>
@@ -972,57 +991,66 @@ const PatientDashboard = () => {
 
           {activeTab === 'privacy' && (
             <div>
-              <h2 className="text-2xl font-bold text-gray-200 mb-6">Privacy Settings</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-200">Privacy Settings</h2>
+                <button
+                  onClick={handleSaveSettings}
+                  className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-xl shadow-md hover:from-blue-500 hover:to-indigo-600 transition-all duration-200"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Settings
+                </button>
+              </div>
               <div className="space-y-6">
                 <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
                   <h3 className="text-lg font-semibold text-gray-200 mb-4">Data Encryption</h3>
                   <div className="flex items-center justify-between">
                     <p className="text-gray-400">End-to-end encryption is enabled for all your medical records</p>
-                    <button 
-                      onClick={handleEncryptionToggle}
-                      className="px-3 py-1 bg-accent-500/20 text-accent-400 rounded-full text-sm hover:bg-accent-500/30 transition-colors duration-200"
-                    >
+                    <span className="px-3 py-1 bg-accent-500/20 text-accent-400 rounded-full text-sm">
                       Active
-                    </button>
+                    </span>
                   </div>
                 </div>
 
                 <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
                   <h3 className="text-lg font-semibold text-gray-200 mb-4">Access Notifications</h3>
                   <div className="space-y-3">
-                    <label className="flex items-center">
-                      <input 
-                        type="checkbox" 
-                        defaultChecked 
-                        onChange={() => handleNotificationToggle('Email access')}
-                        className="mr-3" 
-                      />
+                    <label className="flex items-center justify-between">
                       <span className="text-gray-400">Email notifications when records are accessed</span>
-                    </label>
-                    <label className="flex items-center">
                       <input 
                         type="checkbox" 
-                        defaultChecked 
-                        onChange={() => handleNotificationToggle('Real-time sharing')}
-                        className="mr-3" 
+                        name="access_alerts"
+                        checked={privacySettings.access_alerts}
+                        onChange={handleSettingsChange}
+                        className="w-4 h-4 text-primary-600 bg-gray-800 border-gray-600 rounded focus:ring-primary-500"
                       />
+                    </label>
+                    <label className="flex items-center justify-between">
                       <span className="text-gray-400">Real-time alerts for new sharing requests</span>
+                      <input 
+                        type="checkbox" 
+                        name="notify_on_access"
+                        checked={privacySettings.notify_on_access}
+                        onChange={handleSettingsChange}
+                        className="w-4 h-4 text-primary-600 bg-gray-800 border-gray-600 rounded focus:ring-primary-500"
+                      />
                     </label>
                   </div>
                 </div>
 
                 <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
                   <h3 className="text-lg font-semibold text-gray-200 mb-4">Data Retention</h3>
-                  <p className="text-gray-400 mb-4">Configure how long your data is retained on the network</p>
-                  <select 
-                    onChange={(e) => handleDataRetentionUpdate(e.target.value)}
-                    className="bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary-400"
-                  >
-                    <option value="indefinite">Indefinite (recommended)</option>
-                    <option value="3650">10 years</option>
-                    <option value="1825">5 years</option>
-                    <option value="custom">Custom period</option>
-                  </select>
+                  <div className="flex items-center justify-between">
+                    <p className="text-gray-400">Auto-expire shared data after (days)</p>
+                    <input
+                      type="number"
+                      name="auto_expire_days"
+                      value={privacySettings.auto_expire_days || ''}
+                      onChange={handleSettingsChange}
+                      placeholder="Never"
+                      className="w-24 bg-gray-800 border border-gray-600 rounded-lg px-3 py-1 text-white text-center focus:outline-none focus:border-blue-400"
+                    />
+                  </div>
                 </div>
 
                 <div className="glass-card p-6 rounded-xl border border-orange-400/20 bg-gradient-to-br from-orange-900/70 to-red-800/70 shadow-lg">
@@ -1436,17 +1464,11 @@ const PatientDashboard = () => {
 };
 
 const UploadModal = ({ onClose, onUpload, loading, currentFolder }) => {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [recordType, setRecordType] = useState('Lab Report');
-  const [fileName, setFileName] = useState('');
+  const [year, setYear] = useState('');
   const fileInputRef = React.useRef(null);
   const dropAreaRef = React.useRef(null);
-
-  useEffect(() => {
-    if (file) {
-      setFileName(file.name);
-    }
-  }, [file]);
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -1464,23 +1486,27 @@ const UploadModal = ({ onClose, onUpload, loading, currentFolder }) => {
     e.preventDefault();
     e.stopPropagation();
     dropAreaRef.current.classList.remove('border-primary', 'bg-gray-800');
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      setFile(droppedFile);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length > 10) {
+      alert('Maximum 10 files allowed');
+      return;
     }
+    setFiles(droppedFiles);
   };
 
   const handleFileChange = (e) => {
-    const uploadedFile = e.target.files[0];
-    if (uploadedFile) {
-      setFile(uploadedFile);
+    const uploadedFiles = Array.from(e.target.files);
+    if (uploadedFiles.length > 10) {
+      alert('Maximum 10 files allowed');
+      return;
     }
+    setFiles(uploadedFiles);
   };
 
   const handleUploadClick = () => {
-    if (file && fileName) {
+    if (files.length > 0) {
       const parentId = currentFolder ? [currentFolder.record_id] : [];
-      onUpload(file, recordType, fileName, parentId);
+      onUpload(files, recordType, year, parentId);
     }
   };
 
@@ -1501,13 +1527,20 @@ const UploadModal = ({ onClose, onUpload, loading, currentFolder }) => {
           className="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center mb-6 cursor-pointer hover:border-primary-400 transition-colors"
         >
           <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          {file ? (
-            <p className="text-gray-200">{file.name}</p>
+          {files.length > 0 ? (
+            <div className="text-gray-200 mb-2">
+              <p>{files.length} file{files.length > 1 ? 's' : ''} selected:</p>
+              <ul className="list-disc list-inside max-h-32 overflow-y-auto">
+                {files.map((f, i) => (
+                  <li key={i}>{f.name}</li>
+                ))}
+              </ul>
+            </div>
           ) : (
             <p className="text-gray-300 mb-2">Drag & drop files here, or click to browse</p>
           )}
-          <p className="text-gray-500 text-sm">Supports PDF, DICOM, JPG, PNG files up to 50MB</p>
-          <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+          <p className="text-gray-500 text-sm">Supports PDF, DICOM, JPG, PNG files up to 50MB. Max 10 files.</p>
+          <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" />
         </div>
         <div className="space-y-4 mb-6">
           <div>
@@ -1525,13 +1558,13 @@ const UploadModal = ({ onClose, onUpload, loading, currentFolder }) => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">File Name</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Year (for organization)</label>
             <input
               type="text"
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
               className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white"
-              placeholder="e.g., 'Lab Results 2024'"
+              placeholder="e.g., '2024'"
             />
           </div>
         </div>
@@ -1544,8 +1577,8 @@ const UploadModal = ({ onClose, onUpload, loading, currentFolder }) => {
           </motion.button>
           <motion.button whileHover={{ scale: 1.02 }}
             onClick={handleUploadClick}
-            disabled={!file || !fileName || loading}
-            className={`flex-1 px-6 py-3 text-white font-semibold rounded-lg transition-all duration-200 ${!file || !fileName || loading ? 'bg-gray-500 cursor-not-allowed' : 'bg-gradient-to-r from-primary to-blue-500 hover:from-primary-600 hover:to-blue-600'
+            disabled={files.length === 0 || loading}
+            className={`flex-1 px-6 py-3 text-white font-semibold rounded-lg transition-all duration-200 ${files.length === 0 || loading ? 'bg-gray-500 cursor-not-allowed' : 'bg-gradient-to-r from-primary to-blue-500 hover:from-primary-600 hover:to-blue-600'
               }`}
           >
             {loading ? 'Uploading...' : 'Upload'}
