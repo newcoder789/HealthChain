@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, CheckCircle, Folder, File, FileText, FileImage, Download, ArrowLeft, SortAsc, SortDesc, Share2, Clock, Eye, Plus, Users, Shield, Calendar, UserPlus, Edit3, Trash2, Send, Copy, Check, Save } from 'lucide-react';
+import { Upload, X, CheckCircle, Folder, File, FileText, FileImage, Download, ArrowLeft, SortAsc, SortDesc, Share2, Clock, Eye, Plus, Users, Shield, Calendar, UserPlus, Edit3, Trash2, Send, Copy, Check, Save, Microscope } from 'lucide-react';
 import { useAuth } from '../utils/AuthContext';
 import { Protect } from '../components/DeveloperOverlay';
 import { uploadFileToIPFS, getIPFSFile, unpinFileFromIPFS } from '../utils/IPFSHandler';
@@ -311,30 +311,43 @@ const PatientDashboard = () => {
           const fileName = year ? `${file.name} (${year})` : file.name;
 
           console.log("Step 3: Attempting to upload record to canister with CID...");
-          await actor.upload_record(cid, file_type, fileName, parentId, file.size);
-          console.log("Step 4: Record uploaded successfully to canister!");
+          const result = await actor.upload_record(cid, file_type, fileName, parentId, file.size);
+          const recordId = result.Ok;
+          console.log("Step 4: Record uploaded successfully to canister! Record ID:", recordId);
 
           handleToast(`Record "${fileName}" uploaded successfully!`, 'success');
 
-          // Find the newly uploaded record and run quality check via ML
-          try {
-            const uploaded = myRecords.find(r => r.file_name === fileName) || null;
-            const inputUri = `ipfs://${cid}`;
-            const job = await mlClient.createJob({ type: 'quality', input_uri: inputUri, consent_token: 'demo-consent' });
-            const final = await mlClient.pollJob(job.id, { intervalMs: 1000, maxMs: 15000 });
-            if (final.status === 'succeeded') {
-              setQualityByRecordId(prev => ({ ...prev, [uploaded?.record_id || cid]: { score: 0.92, reportUri: final.artifacts?.quality_report_uri } }));
+          // Step 5: Run ML quality check and analysis, as per your plan
+          if (file.type.startsWith('image/')) {
+            try {
+              const inputUri = `ipfs://${cid}`;
+              const job = await mlClient.createJob({ type: 'quality', input_uri: inputUri, consent_token: 'demo-consent' });
+              const final = await mlClient.pollJob(job.id, { intervalMs: 1000, maxMs: 15000 });
+              
+              if (final.status === 'succeeded' && final.artifacts?.report_cid) {
+                // Attach the ML report CID to the on-chain record
+                await actor.submit_ml_report(recordId, final.artifacts.report_cid);
+                const qualityScore = final.artifacts.quality_score || 0.92;
+                setQualityByRecordId(prev => ({ ...prev, [recordId]: { score: qualityScore, reportUri: final.artifacts.report_uri } }));
+                if (qualityScore < 0.8) {
+                  handleToast('AI analysis complete. Consider improving data quality for better research opportunities.', 'info');
+                }
+                handleToast('AI analysis complete!', 'success');
+              } else {
+                throw new Error('ML job did not succeed or returned no artifacts.');
+              }
+            } catch (e) {
+              console.warn('Quality check failed', e);
+              handleToast('AI analysis service unavailable. Please try again later.', 'error');
             }
-          } catch (e) {
-            console.warn('Quality check failed', e);
-            handleToast('Quality service unavailable right now. Try later.', 'error');
           }
         } catch (error) {
           console.error("Critical error during upload:", error);
           handleToast(`Upload failed for ${file.name}: ${error.message || error}`, 'error');
           if (cid) {
-            await unpinFileFromIPFS(cid);
-          }
+            await unpinFileFromIPFS(cid); // Optional: unpin on failure
+          }      
+          setLoadingUpload(false);
         }
       }
       await fetchRecords();
@@ -353,6 +366,7 @@ const PatientDashboard = () => {
     } catch (error) {
       console.error("Folder creation failed:", error);
       handleToast(`Folder creation failed: ${error}`, 'error');
+      setLoading(false);
     } finally {
       setLoading(false);
       setShowFolderModal(false);
@@ -744,28 +758,28 @@ const PatientDashboard = () => {
                             <span className="text-gray-500">•</span>
                             <span className="text-gray-400">{new Date(Number(record.timestamp / 1_000_000n)).toLocaleString()}</span>
                         {qualityByRecordId[record.record_id] && (
-                          <>
+                          <div className="flex items-center space-x-2">
                             <span className="text-gray-500">•</span>
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
-                              Quality {Math.round(qualityByRecordId[record.record_id].score * 100)}%
+                            <span className={`px-2 py-0.5 rounded-full text-xs flex items-center ${
+                              qualityByRecordId[record.record_id].score > 0.8 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-yellow-500/20 text-yellow-300'
+                            }`}>
+                              <Microscope className="h-3 w-3 mr-1" />
+                              Data Quality: {Math.round(qualityByRecordId[record.record_id].score * 100)}%
                             </span>
-                            {qualityByRecordId[record.record_id].reportUri && (
-                              <>
-                                <span className="text-gray-500">•</span>
-                                <a
-                                  href={qualityByRecordId[record.record_id].reportUri.startsWith('ipfs://')
-                                    ? getIPFSFile(qualityByRecordId[record.record_id].reportUri.replace('ipfs://',''))
-                                    : qualityByRecordId[record.record_id].reportUri}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-cyan-300 hover:text-cyan-200 underline underline-offset-2"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  View Quality Report
-                                </a>
-                              </>
-                            )}
-                          </>
+                          </div>
+                        )}
+                        {record.ml_report_cid?.[0] && (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-500">•</span>
+                            <a 
+                              href={getIPFSFile(record.ml_report_cid[0])}
+                              target="_blank" rel="noreferrer"
+                              className="text-cyan-300 hover:text-cyan-200 underline underline-offset-2 text-xs flex items-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              View AI Report
+                            </a>
+                          </div>
                         )}
                           </div>
                         </div>
@@ -773,16 +787,25 @@ const PatientDashboard = () => {
                       <div className="flex items-center space-x-3">
                         {record.file_type !== 'folder' && (
                           <>
-                            <button onClick={() => handleView(record.file_cid)} className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200">
+                            <button onClick={(e) => { e.stopPropagation(); handleView(record.file_cid); }} className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200" title="View">
                               <Eye className="h-4 w-4 text-cyan-300" />
                             </button>
-                            <button onClick={() => handleDownload(record.file_cid, record.file_name)} className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200">
+                            <button onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (record.file_name && record.file_name.length > 0) {
+                                handleDownload(record.file_cid, record.file_name[0]);
+                              }
+                            }} 
+                            className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200" title="Download">
                               <Download className="h-4 w-4 text-cyan-300" />
                             </button>
                           </>
                         )}
                         <button 
-                          onClick={() => handleShareRecord(record)}
+                          onClick={(e) => {
+                            e.stopPropagation(); // This is the crucial fix
+                            handleShareRecord(record);
+                          }}
                           className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200"
                           title="Share Record"
                         >

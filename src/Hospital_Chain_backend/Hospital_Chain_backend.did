@@ -56,6 +56,7 @@ type MedicalRecord = record {
   parent_folder_id : opt text;
   timestamp : nat64;
   metadata_completeness_score : nat8;
+  ml_report_cid : opt text;
   aes_key_enc_for_owner : blob;
   record_id : text;
   derived_artifacts : vec text;
@@ -175,6 +176,7 @@ service : () -> {
   shared_with_me : () -> (Result_11) query;
   submit_for_research : (text) -> (Result_1);
   submit_identity_verification : (text) -> (Result_1);
+  submit_ml_report : (text, text) -> (Result_1);
   update_profile : (UserProfile) -> (Result);
   update_settings : (PrivacySettings) -> (Result_1);
   update_user_name : (text) -> (Result);

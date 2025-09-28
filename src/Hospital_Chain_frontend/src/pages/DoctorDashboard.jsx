@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Users, Eye, Search, UserPlus, X, BadgeCheck, Clock, Send, ShieldQuestion, Activity, UploadCloud } from 'lucide-react';
+import { FileText, Users, Eye, Search, UserPlus, X, BadgeCheck, Clock, Send, ShieldQuestion, Activity, UploadCloud, Folder, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../utils/AuthContext';
 import { getIPFSFile, uploadFileToIPFS } from '../utils/IPFSHandler';
 import { Toast } from '../components/Toast';
@@ -22,6 +22,8 @@ const DoctorDashboard = () => {
   const [verifiedPatientsCount, setVerifiedPatientsCount] = useState(0);
   const [activeTab, setActiveTab] = useState('sharedRecords');
   const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [currentFolder, setCurrentFolder] = useState(null); // For folder navigation
+  const [displayedRecords, setDisplayedRecords] = useState([]); // For folder navigation
   const [auditLogs, setAuditLogs] = useState([]);
 
   const handleToast = (message, type) => {
@@ -79,6 +81,20 @@ const DoctorDashboard = () => {
     }
   }, [isAuthenticated, actor, fetchDoctorData]);
 
+  // Effect for handling folder navigation in shared records
+  useEffect(() => {
+    const getParentId = (record) => record.record.parent_folder_id[0] || null;
+
+    const filtered = sharedRecords.filter(record => {
+      const parentId = getParentId(record);
+      const currentFolderId = currentFolder ? currentFolder.record.record_id : null;
+      return parentId === currentFolderId;
+    });
+
+    // You can add sorting logic here if needed
+    setDisplayedRecords(filtered);
+  }, [sharedRecords, currentFolder]);
+
   const handleView = (cid) => {
     const fileUrl = getIPFSFile(cid);
     window.open(fileUrl, '_blank');
@@ -121,7 +137,7 @@ const DoctorDashboard = () => {
   };
 
   const handleGetVerified = () => {
-    setShowVerificationModal(true);  }
+    setShowVerificationModal(true); }
 
   return (
     <div className="pt-24 pb-16 min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -136,14 +152,14 @@ const DoctorDashboard = () => {
               <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-cyan-300 mb-2">Doctor Dashboard</h1>
               <div className="flex items-center space-x-2">
                 <p className="text-xl text-blue-200">Welcome, {displayName}</p>
-                {isLoading ? <div className="h-4 w-20 bg-slate-700 rounded-full animate-pulse"></div> :
+                {isLoading ? <div className="h-4 w-24 bg-slate-700 rounded-full animate-pulse"></div> :
                   doctorProfile?.identity_status.hasOwnProperty('Approved') ? (
                   <span className="flex items-center px-2 py-1 bg-green-500/20 text-green-300 text-xs rounded-full">
                     <BadgeCheck className="h-3 w-3 mr-1" />
                     Verified
                   </span>
                 ) : doctorProfile?.identity_status.hasOwnProperty('Pending') ? (
-                  <span className="flex items-center px-2 py-1 bg-blue-500/20 text-blue-300 text-xs rounded-full">
+                  <span className="flex items-center px-2 py-1 bg-sky-500/20 text-sky-300 text-xs rounded-full">
                     <Clock className="h-3 w-3 mr-1" />
                     Pending Review
                   </span>
@@ -253,7 +269,14 @@ const DoctorDashboard = () => {
 
         {activeTab === 'sharedRecords' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-6 rounded-xl border border-blue-400/20">
-            <h2 className="text-2xl font-bold text-gray-200 mb-6">Records Shared With You</h2>
+            <div className="flex items-center space-x-4 mb-6">
+              {currentFolder && (
+                <button onClick={() => setCurrentFolder(null)} className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200">
+                  <ArrowLeft className="h-6 w-6 text-cyan-300" />
+                </button>
+              )}
+              <h2 className="text-2xl font-bold text-gray-200">{currentFolder ? currentFolder.record.file_name.join('') : 'Records Shared With You'}</h2>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-gray-300">
                 <thead>
@@ -267,15 +290,20 @@ const DoctorDashboard = () => {
                 </thead>
                 <tbody>
                   {isLoading ? (
-                    <tr><td colSpan="5" className="text-center py-8">Loading records...</td></tr>
-                  ) : sharedRecords.length > 0 ? (
-                    sharedRecords.map(({ record, owner_name, owner_is_verified }) => (
+                    <tr><td colSpan="5" className="text-center py-8">Loading...</td></tr>
+                  ) : displayedRecords.length > 0 ? (
+                    displayedRecords.map(({ record, owner_name, owner_is_verified }) => (
                       <motion.tr
                         key={record.record_id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="border-b border-gray-800 hover:bg-blue-900/20"
-                      > 
+                        onClick={() => {
+                          if (record.file_type === 'folder') {
+                            setCurrentFolder({ record, owner_name, owner_is_verified });
+                          }
+                        }}
+                        className={`border-b border-gray-800 hover:bg-blue-900/20 ${record.file_type === 'folder' ? 'cursor-pointer' : ''}`}
+                      >
                         <td className="py-4 px-4 font-medium">{record.file_name.join('') || 'N/A'}</td>
                         <td className="py-4 px-4">{record.file_type}</td>
                         <td className="py-4 px-4 flex items-center space-x-2">
@@ -284,13 +312,20 @@ const DoctorDashboard = () => {
                         </td>
                         <td className="py-4 px-4">{new Date(Number(record.timestamp / 1_000_000n)).toLocaleDateString()}</td>
                         <td className="py-4 px-4 text-right">
-                          <button
-                            onClick={() => handleView(record.file_cid)}
-                            className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200"
-                            title="View Record"
-                          >
-                            <Eye className="h-4 w-4 text-cyan-300" />
-                          </button>
+                          {record.file_type === 'folder' ? (
+                            <Folder className="h-5 w-5 text-yellow-400 inline-block" />
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleView(record.file_cid);
+                              }}
+                              className="p-2 hover:bg-blue-900/40 rounded-lg transition-colors duration-200"
+                              title="View Record"
+                            >
+                              <Eye className="h-4 w-4 text-cyan-300" />
+                            </button>
+                          )}
                         </td>
                       </motion.tr>
                     ))
@@ -324,7 +359,7 @@ const DoctorDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {isLoading ? (
+                  {isLoading && sentRequests.length === 0 ? (
                     <tr><td colSpan="4" className="text-center py-8">Loading requests...</td></tr>
                   ) : sentRequests.length > 0 ? (
                     sentRequests.map((request) => (
@@ -333,7 +368,7 @@ const DoctorDashboard = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         className="border-b border-gray-800 hover:bg-blue-900/20"
-                      > 
+                      >
                         <td className="py-4 px-4 font-medium">{request.requester_name.join('') || 'N/A'}</td>
                         <td className="py-4 px-4">{request.record_name.join('') || 'N/A'}</td>
                         <td className="py-4 px-4">{new Date(Number(request.requested_at / 1_000_000n)).toLocaleString()}</td>
@@ -373,7 +408,7 @@ const DoctorDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {isLoading ? (
+                  {isLoading && auditLogs.length === 0 ? (
                     <tr><td colSpan="3" className="text-center py-8">Loading logs...</td></tr>
                   ) : auditLogs.length > 0 ? (
                     auditLogs.map((log) => (
@@ -509,6 +544,12 @@ const DoctorDashboard = () => {
           onSuccess={() => {
             setShowVerificationModal(false);
             fetchDoctorData(); // Refresh profile to show "Pending" status
+            // Refetch data to show the "Pending" status immediately
+            // We set isLoading to true to show a loading state on the badge
+            setIsLoading(true);
+            fetchDoctorData().finally(() => {
+              setIsLoading(false);
+            });
           }}
         />
       )}

@@ -35,6 +35,7 @@ pub struct MedicalRecord {
     plausibility_flags: Vec<String>,
     access_list: AccessList,
     latest_version_id: Option<String>,
+    ml_report_cid: Option<String>, // New field for ML report
     is_anonymized: bool,
 }
 
@@ -498,6 +499,21 @@ fn log_action(record_id: Option<String>, action: String, target: Option<String>,
     timestamp
 }
 
+/// Logs an action for a specific target principal, in addition to the caller.
+fn log_action_for_target(target_principal: Principal, record_id: Option<String>, action: String, actor: Principal, meta_cid: Option<String>) -> u64 {
+    let timestamp = time();
+    let log = AuditLogEntry {
+        id: timestamp,
+        actor: actor.to_string(),
+        action,
+        record_id,
+        target: Some(target_principal.to_string()),
+        meta_cid,
+        timestamp,
+    };
+    AUDIT_LOGS.with(|logs| logs.borrow_mut().insert(timestamp, log));
+    timestamp
+}
 #[update]
 fn get_or_create_user_profile() -> User {
     let caller = get_caller();
@@ -514,7 +530,7 @@ fn get_or_create_user_profile() -> User {
             }
             user
         } else {
-            let mut roles = vec![UserRole::Patient, UserRole::Researcher, UserRole::Doctor];
+            let mut roles = vec![UserRole::Patient]; // More secure default
             if caller == default_admin_principal {
                 roles.push(UserRole::Admin);
             }
@@ -661,6 +677,7 @@ fn upload_record(file_cid: String, file_type: String, file_name: String, parent_
         plausibility_flags: Vec::new(),
         access_list,
         latest_version_id: None,
+        ml_report_cid: None,
         is_anonymized: false,
     };
 
@@ -706,6 +723,7 @@ fn create_folder(folder_name: String, parent_folder_id: Option<String>) -> Resul
         plausibility_flags: Vec::new(),
         access_list: HashMap::new(),
         latest_version_id: None,
+        ml_report_cid: None,
         is_anonymized: false,
     };
 
@@ -744,6 +762,16 @@ fn revoke_access(record_id: String, to_principal: Principal) -> Result<(), Strin
                 if let Some(mut user) = users_mut.get(&caller.as_slice().to_vec()) {
                     user.audit_pointer.push(log_timestamp);
                     users_mut.insert(caller.as_slice().to_vec(), user);
+                }
+            });
+
+            // Double-pointed audit: Log this action for the target user as well.
+            let target_log_timestamp = log_action_for_target(to_principal, Some(record_id.clone()), format!("access_revoked_by_{}", caller.to_text()), caller, None);
+            USERS.with(|users| {
+                let mut users_mut = users.borrow_mut();
+                if let Some(mut user) = users_mut.get(&to_principal.as_slice().to_vec()) {
+                    user.audit_pointer.push(target_log_timestamp);
+                    users_mut.insert(to_principal.as_slice().to_vec(), user);
                 }
             });
 
@@ -1114,6 +1142,16 @@ fn request_access_to_record(record_id: String, message: String) -> Result<String
         }
     });
 
+    // Double-pointed audit: Log this action for the record owner as well.
+    let owner_log_timestamp = log_action_for_target(owner_principal, Some(record_id.clone()), format!("access_requested_by_{}", requester_principal.to_text()), requester_principal, None);
+    USERS.with(|users| {
+        let mut users_mut = users.borrow_mut();
+        if let Some(mut user) = users_mut.get(&owner_principal.as_slice().to_vec()) {
+            user.audit_pointer.push(owner_log_timestamp);
+            users_mut.insert(owner_principal.as_slice().to_vec(), user);
+        }
+    });
+
     Ok(request_id.clone())
 }
 #[query]
@@ -1284,6 +1322,30 @@ fn approve_identity(user_principal: Principal) -> Result<(), String> {
     })
 }
 
+#[update]
+fn submit_ml_report(record_id: String, report_cid: String) -> Result<(), String> {
+    let caller = get_caller();
+    let _user_profile = get_or_create_user_profile();
+
+    RECORDS.with(|records| {
+        let mut records_ref = records.borrow_mut();
+        if let Some(mut record) = records_ref.get(&record_id) {
+            // In a real scenario, you'd verify that the caller is an authorized ML service principal.
+            // For the demo, we'll allow the owner to attach the report.
+            if record.owner != caller {
+                return Err("Only the record owner can attach an ML report.".to_string());
+            }
+
+            record.ml_report_cid = Some(report_cid.clone());
+            records_ref.insert(record_id.clone(), record);
+
+            log_action(Some(record_id), "submit_ml_report".to_string(), None, Some(report_cid));
+            Ok(())
+        } else {
+            Err("Record not found.".to_string())
+        }
+    })
+}
 #[init]
 fn init() {}
 
