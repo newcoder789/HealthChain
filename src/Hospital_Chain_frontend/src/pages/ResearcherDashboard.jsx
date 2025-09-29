@@ -6,15 +6,23 @@ import { TokenService } from '../utils/TokenService';
 import { useDemo } from '../utils/DemoContext';
 import { Protect } from '../components/DeveloperOverlay';
 import { mlClient } from '../utils/mlClient';
+import { dataset_manager } from '../../../declarations/dataset_manager';
+import { research_marketplace } from '../../../declarations/research_marketplace';
+import { icrc1_ledger } from '../../../declarations/icrc1_ledger';
+import { useAuth } from '../utils/AuthContext';
 
 const ResearcherDashboard = () => {
   const [activeTab, setActiveTab] = useState('datasets');
   const { demoMode } = useDemo();
+  const { user, isAuthenticated} = useAuth();
   const [bounties, setBounties] = useState([]);
+  const [datasets, setDatasets] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [form, setForm] = useState({ title: '', description: '', tags: '', budget: 0 });
   const [selectedBounty, setSelectedBounty] = useState(null);
   const [datasetCid, setDatasetCid] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   // Modal states
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
@@ -47,8 +55,44 @@ const ResearcherDashboard = () => {
   });
 
   useEffect(()=>{
+    console.log("DATASET: ", dataset_manager, "\n research manag:", research_marketplace);
     try { setBounties(TokenService.getBounties()); } catch(e) {}
-  },[]);
+  },[isAuthenticated
+    
+  ]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        // Load datasets from dataset_manager canister
+        const datasetsResult = await dataset_manager.list_datasets();
+        setDatasets(datasetsResult);
+
+        // Load projects from research_marketplace canister
+        if (user?.principal) {
+          const projectsResult = await research_marketplace.get_user_projects(user.principal);
+          setProjects(projectsResult);
+        }
+
+        // Load bounties - currently no list_bounties method in research_marketplace
+        // TODO: Implement list_bounties in research_marketplace canister
+        // const bountiesResult = await research_marketplace.list_bounties();
+        // setBounties(bountiesResult);
+        setBounties([]);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        // No fallback to mock data - fully dynamic
+        setDatasets([]);
+        setProjects([]);
+        setBounties([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [user]);
 
   // Modal handlers
   const handleCreateProject = () => {
@@ -72,24 +116,28 @@ const ResearcherDashboard = () => {
   const handleSubmitProject = async () => {
     setBusy(true);
     try {
-      // Simulate project creation
-      const newProject = {
-        id: Date.now(),
-        name: newProjectForm.name,
-        description: newProjectForm.description,
-        category: newProjectForm.category,
-        status: 'planning',
-        progress: 0,
-        collaborators: newProjectForm.collaborators.split(',').map(c => c.trim()).filter(Boolean),
-        datasets: 0,
-        startDate: newProjectForm.startDate,
-        endDate: newProjectForm.endDate,
-        budget: newProjectForm.budget
-      };
-      
-      // Add to mock projects (in real app, this would call the backend)
-      mockProjects.push(newProject);
-      
+      // Call research_marketplace canister to create project
+      const collaborators = newProjectForm.collaborators.split(',').map(c => c.trim()).filter(Boolean);
+      const result = await research_marketplace.create_project(
+        newProjectForm.name,
+        newProjectForm.description,
+        newProjectForm.category,
+        collaborators,
+        newProjectForm.startDate || null,
+        newProjectForm.endDate || null,
+        BigInt(newProjectForm.budget)
+      );
+
+      if ('Err' in result) {
+        throw new Error(result.Err);
+      }
+
+      // Reload projects from canister
+      if (user?.principal) {
+        const projectsResult = await research_marketplace.get_user_projects(user.principal);
+        setProjects(projectsResult);
+      }
+
       setNewProjectForm({
         name: '',
         description: '',
@@ -178,57 +226,7 @@ const ResearcherDashboard = () => {
     }
   };
 
-  const mockDatasets = [
-    {
-      id: 1,
-      name: 'Cardiovascular Disease Dataset',
-      category: 'Cardiology',
-      records: 15420,
-      countries: 12,
-      timeRange: '2020-2025',
-      access: 'approved',
-      anonymization: 'full'
-    },
-    {
-      id: 2,
-      name: 'Diabetes Type 2 Longitudinal Study',
-      category: 'Endocrinology',
-      records: 8750,
-      countries: 8,
-      timeRange: '2018-2024',
-      access: 'pending',
-      anonymization: 'full'
-    },
-    {
-      id: 3,
-      name: 'Cancer Treatment Outcomes',
-      category: 'Oncology',
-      records: 23100,
-      countries: 15,
-      timeRange: '2019-2025',
-      access: 'approved',
-      anonymization: 'differential-privacy'
-    }
-  ];
 
-  const mockProjects = [
-    {
-      id: 1,
-      name: 'AI-Powered Cardiac Risk Prediction',
-      status: 'active',
-      progress: 50,
-      collaborators: 3,
-      datasets: 2
-    },
-    {
-      id: 2,
-      name: 'Global Diabetes Prevention Study',
-      status: 'planning',
-      progress: 25,
-      collaborators: 12,
-      datasets: 1
-    }
-  ];
 
   const tabs = [
     { id: 'datasets', name: 'Datasets', icon: Database },
@@ -262,7 +260,7 @@ const ResearcherDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm">Available Datasets</p>
-                <p className="text-2xl font-bold text-white">{mockDatasets.length}</p>
+                <p className="text-2xl font-bold text-white">{datasets.length}</p>
               </div>
               <Database className="h-8 w-8 text-accent-400" />
             </div>
@@ -277,7 +275,7 @@ const ResearcherDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm">Active Projects</p>
-                <p className="text-2xl font-bold text-white">{mockProjects.length}</p>
+                <p className="text-2xl font-bold text-white">{projects.length}</p>
               </div>
               <BarChart3 className="h-8 w-8 text-primary-400" />
             </div>
@@ -362,7 +360,7 @@ const ResearcherDashboard = () => {
               </div>
 
               <div className="grid grid-cols-1 gap-6">
-                {mockDatasets.map((dataset, index) => (
+                {datasets.map((dataset, index) => (
                   <motion.div
                     key={dataset.id}
                     initial={{ opacity: 0, x: -20 }}
@@ -445,7 +443,7 @@ const ResearcherDashboard = () => {
               </div>
 
               <div className="space-y-6">
-                {mockProjects.map((project, index) => (
+                {projects.map((project, index) => (
                   <motion.div
                     key={project.id}
                     initial={{ opacity: 0, y: 20 }}

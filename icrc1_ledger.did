@@ -1,0 +1,42 @@
+type Account = record {
+  owner : principal;
+  subaccount : opt blob;
+};
+
+type Value = variant {
+  Nat : nat;
+  Int : int;
+  Text : text;
+  Blob : blob;
+};
+
+type TransferArg = record {
+  from_subaccount : opt blob;
+  to : Account;
+  amount : nat;
+  fee : opt nat;
+  memo : opt blob;
+  created_at_time : opt nat64;
+};
+
+type TransferError = variant {
+  GenericError : record {
+    message : text;
+    error_code : nat;
+  };
+  TemporarilyUnavailable;
+  BadBurn : record { min_burn_amount : nat; };
+  Duplicate : record { duplicate_of : nat; };
+  BadFee : record { expected_fee : nat; };
+  CreatedInFuture : record { ledger_time : nat64; };
+  TooOld;
+  InsufficientFunds : record { balance : nat; };
+};
+
+type TransferResult = variant { Ok : nat; Err : TransferError; };
+
+service : {
+  "icrc1_balance_of" : (Account) -> (nat) query;
+  "icrc1_transfer" : (TransferArg) -> (TransferResult);
+  // Add other ICRC-1 methods as needed from the full spec
+}

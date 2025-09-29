@@ -1,5 +1,8 @@
 [workspace]
 members = [
-    "src/Hospital_Chain_backend"
+    "src/Hospital_Chain_backend",
+    "src/dataset_manager",
+    "src/research_marketplace",
+    "src/icrc1_ledger"
 ]
 resolver = "2"

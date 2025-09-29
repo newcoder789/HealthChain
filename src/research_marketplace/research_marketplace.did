@@ -1,0 +1,22 @@
+type Result = variant { Ok : nat; Err : text };
+type ProjectStatus = variant { Planning; Active; Completed; Cancelled };
+type Project = record {
+  id : nat;
+  creator : principal;
+  name : text;
+  description : text;
+  category : text;
+  status : ProjectStatus;
+  progress : nat32;
+  collaborators : vec text;
+  datasets : nat32;
+  start_date : opt text;
+  end_date : opt text;
+  budget : nat;
+  created_at : nat64;
+};
+service : (principal) -> {
+  create_bounty : (text, text, nat) -> (Result);
+  create_project : (text, text, text, vec text, opt text, opt text, nat) -> (Result);
+  get_user_projects : (principal) -> (vec Project);
+}
