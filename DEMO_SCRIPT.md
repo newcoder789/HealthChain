@@ -308,16 +308,4 @@ Researcher Dashboard Features:
 
 ---
 
-## 💡 **PRO TIPS FOR RECORDING**
-
-1. **Use a script but sound natural** - Don't read word-for-word
-2. **Show, don't just tell** - Demonstrate features actively
-3. **Handle errors gracefully** - If something breaks, explain it's a demo
-4. **Keep it engaging** - Use varied pacing and emphasis
-5. **End with clear next steps** - Tell viewers what to do next
-
----
-
-**Total Demo Time: 15-20 minutes**
-**Target Audience: Healthcare professionals, researchers, patients, investors**
 **Key Message: "Decentralized healthcare data management that puts patients in control"**

@@ -29,6 +29,9 @@ const PatientDashboard = () => {
   const [bounties, setBounties] = useState([]);
   const [consented, setConsented] = useState({});
   const [qualityByRecordId, setQualityByRecordId] = useState({});
+  const [mlReportsByRecordId, setMlReportsByRecordId] = useState({});
+  const [showMlReportModal, setShowMlReportModal] = useState(false);
+  const [activeMlReportRecordId, setActiveMlReportRecordId] = useState(null);
   
   // New sharing states
   const [dashboardStats, setDashboardStats] = useState({
@@ -305,6 +308,7 @@ const PatientDashboard = () => {
         try {
           console.log("Step 1: Attempting to upload file to IPFS...", file.name);
           cid = await uploadFileToIPFS(file);
+          // cid = "QmPa8iZXSZrQCyQWr54FTXvZWK8jBLQAmoEpnFS67GgnwS"
           console.log("Step 2: Successful upload to IPFS. CID is:", cid);
 
           // For organization, append year to file name if provided
@@ -313,32 +317,104 @@ const PatientDashboard = () => {
           console.log("Step 3: Attempting to upload record to canister with CID...");
           const result = await actor.upload_record(cid, file_type, fileName, parentId, file.size);
           const recordId = result.Ok;
+          // const recordId = "78693d96d8aaa567b9a8747d3f949163dc75d8e110b81636d05b2be60021378b"
           console.log("Step 4: Record uploaded successfully to canister! Record ID:", recordId);
 
           handleToast(`Record "${fileName}" uploaded successfully!`, 'success');
 
           // Step 5: Run ML quality check and analysis, as per your plan
           if (file.type.startsWith('image/')) {
+            // First try validate_direct (send bytes) which avoids IPFS/network issues
             try {
-              const inputUri = `ipfs://${cid}`;
+              console.log('Sending file to ML validate_direct (bytes)');
+              const resp = await mlClient.validateDirect(file, { recordId });
+              // handle response and show to user
+              if (resp && resp.report) {
+                const qreport = resp.report;
+                // normalize score to 0-100
+                const normalizeScore = (raw) => {
+                  if (raw === null || raw === undefined) return 0;
+                  const n = Number(raw);
+                  if (Number.isNaN(n)) return 0;
+                  if (n > 0 && n <= 1) return Math.round(n * 100);
+                  if (n >= 0 && n <= 100) return Math.round(n);
+                  if (n > 100) return Math.round(Math.min(n, 100));
+                  if (n < 0) return 0;
+                  return Math.round(n);
+                };
+
+                const normalized = normalizeScore(qreport.quality_score ?? qreport.score ?? qreport.qualityScore ?? null);
+                setQualityByRecordId(prev => ({ ...prev, [recordId]: { score: normalized, reportUri: null } }));
+                // store detailed report for modal view
+                setMlReportsByRecordId(prev => ({ ...prev, [recordId]: qreport }));
+                setActiveMlReportRecordId(recordId);
+                setShowMlReportModal(true);
+                handleToast('AI analysis (direct) complete!', 'success');
+                continue; // move to next file
+              }
+            } catch (directErr) {
+              console.warn('validate_direct failed, falling back to async job:', directErr);
+              handleToast('validate_direct failed, will try async job; check server logs if this persists.', 'info');
+              // fall through to job-based flow
+            }
+
+            try {// use a known public gateway that works for this CID
+              const inputUri = `https://ipfs.io/ipfs/${cid}`;
+              console.log('Creating async ML job with inputUri:', inputUri);
+              try {
+                console.log('ML gateway base URL:', mlClient.getBaseUrl());
+              } catch (e) {
+                console.warn('Could not read ML client base URL', e);
+              }
               const job = await mlClient.createJob({ type: 'quality', input_uri: inputUri, consent_token: 'demo-consent' });
+              if (!job || !job.id) {
+                console.warn('ML job creation did not return an id', job);
+                handleToast('AI service did not return a job id. Check ML gateway logs.', 'error');
+                continue; // move to next file
+              }
               const final = await mlClient.pollJob(job.id, { intervalMs: 1000, maxMs: 15000 });
-              
-              if (final.status === 'succeeded' && final.artifacts?.report_cid) {
-                // Attach the ML report CID to the on-chain record
-                await actor.submit_ml_report(recordId, final.artifacts.report_cid);
-                const qualityScore = final.artifacts.quality_score || 0.92;
-                setQualityByRecordId(prev => ({ ...prev, [recordId]: { score: qualityScore, reportUri: final.artifacts.report_uri } }));
-                if (qualityScore < 0.8) {
+              console.log('Async job final:', final);
+              // be tolerant to different artifact key names
+              const artifacts = final.artifacts || {};
+              const reportCid = artifacts.report_cid || artifacts.reportCid || artifacts.quality_report_cid || null;
+              const reportUri = artifacts.report_uri || artifacts.reportUri || artifacts.quality_report_uri || artifacts.report_uri || null;
+              const qualityScore = Number(artifacts.quality_score ?? artifacts.qualityScore ?? artifacts.score ?? 0);
+
+                if (final.status === 'succeeded' && reportCid) {
+                try {
+                  await actor.submit_ml_report(recordId, reportCid);
+                } catch (e) {
+                  console.warn('Failed to attach ML report on-chain', e);
+                }
+                // normalize qualityScore similarly
+                const normalizeScore = (raw) => {
+                  if (raw === null || raw === undefined) return 0;
+                  const n = Number(raw);
+                  if (Number.isNaN(n)) return 0;
+                  if (n > 0 && n <= 1) return Math.round(n * 100);
+                  if (n >= 0 && n <= 100) return Math.round(n);
+                  if (n > 100) return Math.round(Math.min(n, 100));
+                  if (n < 0) return 0;
+                  return Math.round(n);
+                };
+                const normalized = normalizeScore(qualityScore);
+                setQualityByRecordId(prev => ({ ...prev, [recordId]: { score: normalized || 0, reportUri } }));
+                // store detailed artifacts for modal
+                setMlReportsByRecordId(prev => ({ ...prev, [recordId]: artifacts }));
+                setActiveMlReportRecordId(recordId);
+                setShowMlReportModal(true);
+                if (qualityScore && qualityScore < 0.8) {
                   handleToast('AI analysis complete. Consider improving data quality for better research opportunities.', 'info');
                 }
                 handleToast('AI analysis complete!', 'success');
               } else {
-                throw new Error('ML job did not succeed or returned no artifacts.');
+                const serverLogs = final?.logs || artifacts?.logs || artifacts?.error || 'No additional logs';
+                console.warn('Quality check did not return expected artifacts', { final, job });
+                handleToast(`AI analysis failed: ${serverLogs}`, 'error');
               }
             } catch (e) {
               console.warn('Quality check failed', e);
-              handleToast('AI analysis service unavailable. Please try again later.', 'error');
+              handleToast(`AI analysis service unavailable: ${e.message || e}`, 'error');
             }
           }
         } catch (error) {
@@ -757,21 +833,29 @@ const PatientDashboard = () => {
                             <span className="text-gray-400">{record.file_type}</span>
                             <span className="text-gray-500">•</span>
                             <span className="text-gray-400">{new Date(Number(record.timestamp / 1_000_000n)).toLocaleString()}</span>
-                        {qualityByRecordId[record.record_id] && (
-                          <div className="flex items-center space-x-2">
-                            <span className="text-gray-500">•</span>
-                            <span className={`px-2 py-0.5 rounded-full text-xs flex items-center ${
-                              qualityByRecordId[record.record_id].score > 0.8 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-yellow-500/20 text-yellow-300'
-                            }`}>
-                              <Microscope className="h-3 w-3 mr-1" />
-                              Data Quality: {Math.round(qualityByRecordId[record.record_id].score * 100)}%
-                            </span>
-                          </div>
-                        )}
+                        {qualityByRecordId[record.record_id] && (() => {
+                          const qRaw = qualityByRecordId[record.record_id]?.score;
+                          // We store normalized score as a 0-100 value. Fall back safely if older code used 0-1.
+                          const q = qRaw === undefined || qRaw === null ? null : (qRaw > 1 ? qRaw : qRaw * 100);
+                          const qDisplay = q !== null ? Math.round(q) : null;
+                          const isGood = q !== null ? q >= 80 : false;
+                          return (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-gray-500">•</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs flex items-center ${
+                                isGood ? 'bg-emerald-500/20 text-emerald-300' : 'bg-yellow-500/20 text-yellow-300'
+                              }`}>
+                                <Microscope className="h-3 w-3 mr-1" />
+                                Data Quality: {qDisplay !== null ? `${qDisplay}%` : 'N/A'}
+                              </span>
+                            </div>
+                          );
+                        })()}
+
                         {record.ml_report_cid?.[0] && (
                           <div className="flex items-center space-x-2">
                             <span className="text-gray-500">•</span>
-                            <a 
+                            <a
                               href={getIPFSFile(record.ml_report_cid[0])}
                               target="_blank" rel="noreferrer"
                               className="text-cyan-300 hover:text-cyan-200 underline underline-offset-2 text-xs flex items-center"
@@ -779,6 +863,13 @@ const PatientDashboard = () => {
                             >
                               View AI Report
                             </a>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setActiveMlReportRecordId(record.record_id); setShowMlReportModal(true); }}
+                              className="text-cyan-300 hover:text-cyan-200 underline underline-offset-2 text-xs flex items-center"
+                              title="Open AI report modal"
+                            >
+                              Open Report
+                            </button>
                           </div>
                         )}
                           </div>
@@ -1101,6 +1192,52 @@ const PatientDashboard = () => {
       <AnimatePresence>
         {showUploadModal && (
           <UploadModal onClose={() => setShowUploadModal(false)} onUpload={handleUpload} loading={loadingUpload} currentFolder={currentFolder} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showMlReportModal && activeMlReportRecordId && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card p-6 rounded-2xl max-w-2xl w-full mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-white">AI Quality Report</h3>
+                <button onClick={() => setShowMlReportModal(false)} className="p-2 hover:bg-gray-800 rounded"><X className="h-5 w-5 text-gray-300" /></button>
+              </div>
+              <div className="space-y-3">
+                {mlReportsByRecordId[activeMlReportRecordId] ? (
+                  (() => {
+                    const r = mlReportsByRecordId[activeMlReportRecordId];
+                    const score = qualityByRecordId[activeMlReportRecordId]?.score ?? 'N/A';
+                    const warnings = [];
+                    if (r?.detailed?.blur_check?.is_blurry) warnings.push('Image appears blurry');
+                    if (r?.detailed?.brightness?.mean_brightness < 30) warnings.push('Image is very dark');
+                    if (r?.metadata_report && !r.metadata_report.present) warnings.push('Missing metadata (age/gender/patient_id)');
+                    return (
+                      <div>
+                        <p className="text-white font-semibold">Quality score: <span className="text-cyan-300">{score}%</span></p>
+                        {warnings.length > 0 && (
+                          <div className="mt-3 p-3 bg-yellow-900/30 border border-yellow-700 rounded">
+                            <p className="text-yellow-300 font-semibold">Warnings</p>
+                            <ul className="text-yellow-200 text-sm list-disc list-inside">
+                              {warnings.map((w, i) => <li key={i}>{w}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        <div className="mt-4 text-sm text-gray-300">
+                          <p><strong>Dimensions:</strong> {r?.detailed?.dimensions?.width} x {r?.detailed?.dimensions?.height}</p>
+                          <p><strong>Brightness (mean):</strong> {r?.detailed?.brightness?.mean_brightness?.toFixed(1)}</p>
+                          <p><strong>Blur lap var:</strong> {r?.detailed?.blur_check?.lap_var?.toFixed(2)} (threshold {r?.detailed?.blur_check?.threshold})</p>
+                          <p><strong>Edge uniformity (L/R/T/B):</strong> {[(r?.detailed?.edge_coverage?.left_uniform_pct||0).toFixed(2),(r?.detailed?.edge_coverage?.right_uniform_pct||0).toFixed(2),(r?.detailed?.edge_coverage?.top_uniform_pct||0).toFixed(2),(r?.detailed?.edge_coverage?.bottom_uniform_pct||0).toFixed(2)].join(' / ')}</p>
+                          <p className="mt-2"><strong>Metadata present:</strong> {r?.metadata_report?.present ? 'Yes' : 'No'}</p>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <p className="text-gray-300">No detailed report available.</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
       <AnimatePresence>

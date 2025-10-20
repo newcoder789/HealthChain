@@ -50,6 +50,7 @@ const DoctorDashboard = () => {
 
       // Fetch records shared with the doctor
       if (recordsRes.Ok) {
+        console.log(recordsRes.Ok)
         setSharedRecords(recordsRes.Ok);
         const uniqueVerifiedPatients = new Set(
           recordsRes.Ok

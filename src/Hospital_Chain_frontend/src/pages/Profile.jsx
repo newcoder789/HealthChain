@@ -67,6 +67,16 @@ const Profile = () => {
     mlUrl: '',
   });
 
+  // Function to determine the primary role
+  const determinePrimaryRole = (roles) => {
+    if (!roles || roles.length === 0) {
+      return 'Nothing'; // Or some default role
+    }
+    // Assuming the first role is the primary role
+    return Object.keys(roles[0])[0];
+  };
+
+
   const [isEditing, setIsEditing] = useState(false);
   const [mlHealth, setMlHealth] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -103,7 +113,7 @@ const Profile = () => {
             console.error("Failed to get user profile from backend.");
             return;
           }
-          console.log(Object.keys(userDataFromBackend.roles?.[0]))
+         
           
           const userProfileData = userDataFromBackend.profile?.[0];
           setUser(userDataFromBackend);
