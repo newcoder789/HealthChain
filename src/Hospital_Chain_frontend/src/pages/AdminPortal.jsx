@@ -34,9 +34,9 @@ const AdminPortal = () => {
 
   return (
     <div className="pt-24 pb-16 max-w-6xl mx-auto px-4">
-      <h1 className="text-3xl font-semibold mb-6">Admin Portal</h1>
+      <h1 className="text-3xl font-bold text-gray-800 mb-6">Admin Portal</h1>
       <div className="grid md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg p-4 shadow">
+        <div className="bg-white rounded-lg p-4 shadow-md">
           <h2 className="font-semibold mb-3">Doctor Verification Requests</h2>
           {requests.map((r, i) => (
             <div key={i} className="flex items-center justify-between border rounded p-3 mb-2">
@@ -52,7 +52,7 @@ const AdminPortal = () => {
             </div>
           ))}
         </div>
-        <div className="bg-white rounded-lg p-4 shadow">
+        <div className="bg-white rounded-lg p-4 shadow-md">
           <h2 className="font-semibold mb-3">Research Submissions</h2>
           {submissions.map((s) => (
             <div key={s.id} className="flex items-center justify-between border rounded p-3 mb-2">
@@ -70,5 +70,3 @@ const AdminPortal = () => {
 };
 
 export default AdminPortal;
-
-

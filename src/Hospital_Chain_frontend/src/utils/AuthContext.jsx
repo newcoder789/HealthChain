@@ -2,12 +2,13 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { AuthClient } from '@dfinity/auth-client';
 import { canisterId, Hospital_Chain_backend } from 'declarations/Hospital_Chain_backend';
 import { createActor } from 'declarations/Hospital_Chain_backend';
+import { deriveKeyFromIdentity } from './cryptoKeys';
 
 const network = process.env.DFX_NETWORK;
 const identityProvider =
   network === 'ic'
     ? 'https://identity.ic0.app'
-    : 'http://ulvla-h7777-77774-qaacq-cai.localhost:4943';
+    : `http://ulvla-h7777-77774-qaacq-cai.localhost:4943`;
      
 const AuthContext = createContext();
 
@@ -17,22 +18,38 @@ export const AuthProvider = ({ children }) => {
     authClient: undefined,
     isAuthenticated: false,
     principal: 'Click "Whoami" to see your principal ID',
-    userRole: null
+    userRole: null,
+    identity: null,
+    publicKeyPem: null
   });
 
   // New function to check for auth and set role correctly
   const checkAuthAndSetRole = useCallback(async () => {
-    const authClient = await AuthClient.create();
+    const authClient = await AuthClient.create({
+      disableCertificateVerification: network !== 'ic' // Disable for local development
+    });
     const isAuthenticated = await authClient.isAuthenticated();
     let actor = state.actor;
     let principal = state.principal;
     let currentRole = null;
+    let identity = null;
+    let publicKeyPem = null;
 
     if (isAuthenticated) {
-      const identity = authClient.getIdentity();
+      identity = authClient.getIdentity();
       principal = identity.getPrincipal().toString();
       actor = createActor(canisterId, { agentOptions: { identity } });
       console.log("actor setted as", actor);
+
+      // Derive encryption keys from identity
+      try {
+        const keyPair = await deriveKeyFromIdentity(identity);
+        publicKeyPem = keyPair.publicPem;
+        console.log("Derived encryption keys from Internet Identity");
+      } catch (keyError) {
+        console.error("Failed to derive encryption keys:", keyError);
+      }
+
       try {
         const userProfile = await actor.get_profile();
         // Fix: userProfile.role is now an array of roles
@@ -41,15 +58,15 @@ export const AuthProvider = ({ children }) => {
         else if (userProfile.role.includes('Researcher')) currentRole = 'Researcher';
         else currentRole = null;
       } catch (error) {
-        currentRole = null; 
+        currentRole = null;
         try {
           // Automatically register as a patient.
           // await actor.register_user({ Patient: null });
           await actor.get_or_create_user_profile();
-          currentRole = ['Patient', 'Doctor', 'Researcher'];
+          currentRole = 'Patient'; // Set default role to Patient
         } catch (registerError) {
           console.error("Failed to register user:", registerError);
-        currentRole = null;
+          currentRole = null;
         }
       }
     }
@@ -60,6 +77,8 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated,
       principal,
       userRole: currentRole,
+      identity,
+      publicKeyPem,
     });
   }, [state.actor, state.principal]);
 

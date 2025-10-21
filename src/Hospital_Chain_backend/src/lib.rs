@@ -10,6 +10,14 @@ use std::borrow::Cow;
 use ic_cdk::api::time;
 use ic_cdk::api::msg_caller;
 use std::collections::HashSet;
+use ic_cdk::{
+    api::canister_self,
+    management_canister::{
+        HttpHeader, HttpMethod, HttpRequestArgs, HttpRequestResult, TransformArgs,
+        TransformContext, TransformFunc,http_request
+    },
+};
+use serde_json::json;
 
 // --- Data Structures ---
 
@@ -296,6 +304,7 @@ struct UserProfile {
     ethnicity: Option<String>,
     meta: Option<HashMap<String,String>>,
     nationality: Option<String>,
+    encryption_public_key: Option<String>,
 }
 #[derive(CandidType, Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 struct VerificationEvidence { evidence_cid: String, uploaded_at: u64 }
@@ -756,6 +765,10 @@ fn revoke_access(record_id: String, to_principal: Principal) -> Result<(), Strin
 
             record.access_list.remove(&to_principal);
 
+            // Also remove any stored per-principal encrypted AES keys for the revoked principal
+            let to_principal_text = to_principal.to_text();
+            record.per_principal_keys.retain(|ek| ek.principal_text != to_principal_text);
+
             let log_timestamp = log_action(Some(record_id.clone()), format!("revoke_access_from_{}", to_principal.to_text()), Some(to_principal.to_text()), None);
             USERS.with(|users| {
                 let mut users_mut = users.borrow_mut();
@@ -796,18 +809,17 @@ fn revoke_access(record_id: String, to_principal: Principal) -> Result<(), Strin
 #[query]
 fn get_my_records() -> Result<Vec<MedicalRecord>, String> {
     let caller = get_caller();
-    let user_profile = get_or_create_user_profile(); 
-
-    let record_ids = user_profile.records;
-    let result = RECORDS.with(|records_map_ref| {
+    
+    // FIX: Iterate through all records and return the ones owned by the caller.
+    // The previous implementation only checked the user's top-level record list,
+    // missing records that were inside folders.
+    RECORDS.with(|records_map_ref| {
         let records_map = records_map_ref.borrow();
-        record_ids.iter()
-            .filter_map(|id| records_map.get(id))
-            .map(|record| record.clone())
-            .collect()
-    });
-
-    Ok(result)
+        let owned_records = records_map.iter()
+            .filter_map(|entry| if entry.value().owner == caller { Some(entry.value().clone()) } else { None })
+            .collect();
+        Ok(owned_records)
+    })
 }
 
 #[update]
@@ -843,6 +855,103 @@ fn grant_access(record_id: String, to_principal: Principal, permission: AccessPe
                 index_ref.insert(to_principal, shared_list_struct);
             });
 
+            Ok(())
+        } else {
+            Err("Record not found".to_string())
+        }
+    })
+}
+
+/// Owner stores an encrypted AES key blob for a specific principal (grantee).
+#[update]
+fn store_encrypted_key_for_principal(record_id: String, enc_key: Vec<u8>, principal_text: String, expires_at: Option<u64>) -> Result<(), String> {
+    let caller = get_caller();
+    let _user_profile = get_or_create_user_profile();
+
+    RECORDS.with(|records| {
+        let mut records_ref = records.borrow_mut();
+        if let Some(mut record) = records_ref.get(&record_id) {
+            if record.owner != caller {
+                return Err("Only the record owner can store encrypted keys.".to_string());
+            }
+
+            // Replace existing entry for the principal if present
+            record.per_principal_keys.retain(|ek| ek.principal_text != principal_text);
+            record.per_principal_keys.push(EncryptedKeyForPrincipal {
+                principal_text: principal_text.clone(),
+                encrypted_key: enc_key.clone(),
+                expires_at,
+            });
+
+            let log_timestamp = log_action(Some(record_id.clone()), format!("store_encrypted_key_for_{}", principal_text), None, None);
+            USERS.with(|users| {
+                let mut users_mut = users.borrow_mut();
+                if let Some(mut user) = users_mut.get(&caller.as_slice().to_vec()) {
+                    user.audit_pointer.push(log_timestamp);
+                    users_mut.insert(caller.as_slice().to_vec(), user);
+                }
+            });
+
+            records_ref.insert(record_id.clone(), record);
+            Ok(())
+        } else {
+            Err("Record not found".to_string())
+        }
+    })
+}
+
+/// Grantee calls this to retrieve their wrapped AES key (if authorized). Returns Err if not authorized or not found.
+#[query]
+fn get_my_encrypted_key_for_record(record_id: String) -> Result<Vec<u8>, String> {
+    let caller = get_caller();
+    let caller_text = caller.to_text();
+
+    RECORDS.with(|records| {
+        let records_map = records.borrow();
+        if let Some(record) = records_map.get(&record_id) {
+            // Check access permission
+            let has_access = record.access_list.iter().any(|(p, perm)| p.to_text() == caller_text && perm.can_view);
+            if !has_access {
+                return Err("Not authorized to view this record".to_string());
+            }
+
+            // Find per-principal key for caller
+            if let Some(entry) = record.per_principal_keys.iter().find(|ek| ek.principal_text == caller_text) {
+                // Check expiry if present
+                if let Some(exp) = entry.expires_at {
+                    if exp < ic_cdk::api::time() {
+                        return Err("Wrapped key expired".to_string());
+                    }
+                }
+                return Ok(entry.encrypted_key.clone());
+            }
+
+            Err("No wrapped key stored for caller".to_string())
+        } else {
+            Err("Record not found".to_string())
+        }
+    })
+}
+
+#[update]
+fn remove_encrypted_key_for_principal(record_id: String, principal_text: String) -> Result<(), String> {
+    let caller = get_caller();
+    RECORDS.with(|records| {
+        let mut records_ref = records.borrow_mut();
+        if let Some(mut record) = records_ref.get(&record_id) {
+            if record.owner != caller {
+                return Err("Only the owner can remove encrypted keys".to_string());
+            }
+            record.per_principal_keys.retain(|ek| ek.principal_text != principal_text);
+            let log_timestamp = log_action(Some(record_id.clone()), format!("remove_encrypted_key_for_{}", principal_text), None, None);
+            USERS.with(|users| {
+                let mut users_mut = users.borrow_mut();
+                if let Some(mut user) = users_mut.get(&caller.as_slice().to_vec()) {
+                    user.audit_pointer.push(log_timestamp);
+                    users_mut.insert(caller.as_slice().to_vec(), user);
+                }
+            });
+            records_ref.insert(record_id.clone(), record);
             Ok(())
         } else {
             Err("Record not found".to_string())
@@ -1215,6 +1324,16 @@ fn approve_access_request(request_id: String) -> Result<(), String> {
 
     grant_access(request.record_id.clone(), requester_principal, permission)?;
 
+    // --- FIX: Update the shared records index for the grantee ---
+    // This is the missing piece. Without this, shared_with_me() won't find the record.
+    SHARED_RECORDS_INDEX.with(|index| {
+        let mut index_ref = index.borrow_mut();
+        let mut shared_list_struct = index_ref.get(&requester_principal).unwrap_or_default();
+        if !shared_list_struct.record_ids.contains(&request.record_id) {
+            shared_list_struct.record_ids.push(request.record_id.clone());
+            index_ref.insert(requester_principal, shared_list_struct);
+        }
+    });
     request.status = RequestStatus::Approved;
     request.resolved_at = Some(time());
 
@@ -1346,6 +1465,218 @@ fn submit_ml_report(record_id: String, report_cid: String) -> Result<(), String>
         }
     })
 }
+
+// #[update]
+// async fn create_ml_job(type_: String, input_uri: String, consent_token: String, params: Option<String>) -> Result<String, String> {
+//     let url = "http://ml-service-9ar8.onrender.com/ml/jobs".to_string();
+//     let body = serde_json::json!({
+//         "type": type_,
+//         "input_uri": input_uri,
+//         "consent_token": consent_token,
+//         "params": params.unwrap_or("{}".to_string())
+//     });
+//     let body_str = body.to_string();
+
+//     let request = MgmtHttpRequest {
+//         url,
+//         method: MgmtHttpMethod::POST,
+//         body: Some(body_str.into_bytes()),
+//         headers: vec![("Content-Type".to_string(), "application/json".to_string())],
+//         max_response_bytes: Some(2048),
+//         transform: None,
+//     };
+
+//     let response = ic_cdk::api::management_canister::http_request::http_request(request, 1_000_000_000).await;
+
+//     match response {
+//         Ok(resp) => {
+//             if resp.status == 200 {
+//                 let body_str = String::from_utf8(resp.body).map_err(|_| "Invalid UTF-8 response".to_string())?;
+//                 Ok(body_str)
+//             } else {
+//                 Err(format!("HTTP error: {}", resp.status))
+//             }
+//         }
+//         Err(e) => Err(format!("HTTP request failed: {:?}", e)),
+//     }
+// }
+
+// #[update]
+// async fn get_ml_job(job_id: String) -> Result<String, String> {
+//     let url = format!("http://ml-service-9ar8.onrender.com/ml/jobs/{}", job_id);
+
+//     let request = MgmtHttpRequest {
+//         url,
+//         method: MgmtHttpMethod::GET,
+//         body: None,
+//         headers: vec![],
+//         max_response_bytes: Some(2048),
+//         transform: None,
+//     };
+
+//     let response = ic_cdk::api::management_canister::http_request::http_request(request, 1_000_000_000).await;
+
+//     match response {
+//         Ok(resp) => {
+//             if resp.status == 200 {
+//                 let body_str = String::from_utf8(resp.body).map_err(|_| "Invalid UTF-8 response".to_string())?;
+//                 Ok(body_str)
+//             } else {
+//                 Err(format!("HTTP error: {}", resp.status))
+//             }
+//         }
+//         Err(e) => Err(format!("HTTP request failed: {:?}", e)),
+//     }
+// }
+
+// #[update]
+// async fn validate_ml_direct(file_data: Vec<u8>, metadata: Option<String>) -> Result<String, String> {
+//     let url = "http://ml-service-9ar8.onrender.com/ml/validate_direct".to_string();
+
+//     let mut body = vec![];
+//     // Simulate FormData, but since it's binary, need to handle multipart or just send as is.
+//     // For simplicity, assume file_data is the body, but actually need proper multipart.
+//     // This is a simplification; in real scenario, construct proper multipart/form-data.
+
+//     // For now, just send the file_data as body, assuming the service accepts raw file.
+//     // But from mlClient, it's FormData with file and metadata.
+
+//     // To properly handle, we need to build multipart/form-data manually.
+
+//     // For simplicity, let's assume we send JSON or adjust.
+
+//     // Since it's binary, and headers, perhaps send as application/octet-stream.
+
+//     let request = MgmtHttpRequest {
+//         url,
+//         method: MgmtHttpMethod::POST,
+//         body: Some(file_data),
+//         headers: vec![("Content-Type".to_string(), "application/octet-stream".to_string())],
+//         max_response_bytes: Some(2048),
+//         transform: None,
+//     };
+
+//     let response = ic_cdk::api::management_canister::http_request::http_request(request, 1_000_000_000).await;
+
+//     match response {
+//         Ok(resp) => {
+//             if resp.status == 200 {
+//                 let body_str = String::from_utf8(resp.body).map_err(|_| "Invalid UTF-8 response".to_string())?;
+//                 Ok(body_str)
+//             } else {
+//                 Err(format!("HTTP error: {}", resp.status))
+//             }
+//         }
+//         Err(e) => Err(format!("HTTP request failed: {:?}", e)),
+//     }
+// }
+
+#[update]
+async fn create_ml_job(type_: String, input_uri: String, consent_token: String, params: Option<String>) -> Result<String, String> {
+    let url = "https://ml-service-9ar8.onrender.com/ml/jobs".to_string(); // HTTPS required
+    let cycles: u128 = 3_000_000_000; // Slightly increased cycles for safety
+
+    // Correctly parse the optional params string into a JSON value.
+    let params_value: serde_json::Value = params
+        .and_then(|p_str| serde_json::from_str(&p_str).ok())
+        .unwrap_or(json!({}));
+
+    let body = json!({
+        "type": type_,
+        "input_uri": input_uri,
+        "consent_token": consent_token,
+        "params": params_value
+    });
+
+    let body_bytes = body.to_string().into_bytes();
+    let request = HttpRequestArgs {
+        url,
+        max_response_bytes: Some(2048),
+        method: HttpMethod::POST,
+        headers: vec![HttpHeader {
+            name: "Content-Type".to_string(),
+            value: "application/json".to_string(),
+        }],
+        body: Some(body_bytes),
+        transform: None,
+    };
+
+     match http_request(&request).await {
+        Ok(resp) => String::from_utf8(resp.body).map_err(|_| "Invalid UTF-8 response".to_string()),
+        Err(msg) => Err(format!("HTTP request failed: {}", msg.to_string())),
+    }
+}
+
+#[update]
+async fn get_ml_job(job_id: String) -> Result<String, String> {
+    let url = format!("https://ml-service-9ar8.onrender.com/ml/jobs/{}", job_id);
+    let cycles: u128 = 3_000_000_000;
+    let request = HttpRequestArgs {
+        url,
+        max_response_bytes: Some(2048),
+        method: HttpMethod::GET,
+        headers: vec![],
+        body: None,
+        transform: None,
+    };
+
+     match http_request(&request).await {
+        Ok(resp) => String::from_utf8(resp.body).map_err(|_| "Invalid UTF-8 response".to_string()),
+        Err(msg) => Err(format!("HTTP request failed: {}", msg.to_string())),
+    }
+}
+
+#[update]
+async fn validate_ml_direct(file_data: Vec<u8>, metadata: Option<String>) -> Result<String, String> {
+    let url = "https://ml-service-9ar8.onrender.com/ml/validate_direct".to_string();
+    let cycles: u128 = 5_000_000_000; // Increased cycles for larger file uploads
+
+    // This endpoint expects multipart/form-data, which is complex to build in a canister.
+    // A common workaround is to send the file as raw bytes and metadata in a custom header.
+    // The ML service must be adapted to read from the header.
+    let metadata_str = metadata.unwrap_or_else(|| "{}".to_string());
+
+    let request = HttpRequestArgs {
+        url,
+        max_response_bytes: Some(2048),
+        method: HttpMethod::POST,
+        headers: vec![HttpHeader {
+            name: "Content-Type".to_string(),
+            value: "application/octet-stream".to_string(),
+        },
+        HttpHeader {
+            name: "X-Metadata".to_string(),
+            value: metadata_str,
+        }],
+        body: Some(file_data),
+        transform: None,
+    };
+
+     match http_request(&request).await {
+        Ok(resp) => String::from_utf8(resp.body).map_err(|_| "Invalid UTF-8 response".to_string()),
+        Err(msg) => Err(format!("HTTP request failed: {}", msg.to_string())),
+    }
+}
+
+#[update]
+async fn health_check_ml() -> Result<String, String> {
+    let url = "https://ml-service-9ar8.onrender.com/health".to_string();
+
+    let cycles: u128 = 2_000_000_000;
+    let request = HttpRequestArgs {
+        url,
+        max_response_bytes: Some(1024),
+        method: HttpMethod::GET,
+        headers: vec![],
+        body: None,
+        transform: None,
+    };
+    match http_request(&request).await {
+        Ok(resp) => String::from_utf8(resp.body).map_err(|_| "Invalid UTF-8 response".to_string()),
+        Err(msg) => Err(format!("HTTP request failed: {}", msg.to_string())),
+    }
+}
+
 #[init]
 fn init() {}
 

@@ -10,6 +10,7 @@ import Demo from './pages/Demo';
 import PatientDashboard from './pages/PatientDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
 import ResearcherDashboard from './pages/ResearcherDashboard';
+import RecordViewer from './pages/RecordViewer';
 import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
 import './index.scss';
@@ -41,6 +42,7 @@ function AppRouter() {
             <Route path="/dashboard/patient" element={<PatientDashboard />} />
             <Route path="/dashboard/doctor" element={<DoctorDashboard />} />
             <Route path="/dashboard/researcher" element={<ResearcherDashboard />} />
+            <Route path="/view-record/:recordId" element={<RecordViewer />} />
             <Route path="/demo" element={<Demo />} />
           </>
         )}
@@ -55,7 +57,7 @@ function AppRouter() {
 
 function AppContent() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="min-h-screen bg-gray-100 text-gray-800">
       <AppRouter />
       <DeveloperOverlayBanner />
       <JudgeTour />

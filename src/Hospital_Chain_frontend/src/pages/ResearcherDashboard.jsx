@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Microscope,
-  Database,
   BarChart3,
   Download,
   Search,
@@ -22,11 +21,11 @@ import {
   DollarSign,
   Tag
 } from 'lucide-react';
+import { Database } from 'lucide-react';
 import AuditLogTable from '../components/AuditLogTable';
 import { TokenService } from '../utils/TokenService';
 import { useDemo } from '../utils/DemoContext';
 import { Protect } from '../components/DeveloperOverlay';
-import { mlClient } from '../utils/mlClient';
 import { dataset_manager } from '../../../declarations/dataset_manager';
 import { research_marketplace } from '../../../declarations/research_marketplace';
 import { icrc1_ledger } from '../../../declarations/icrc1_ledger';
@@ -34,8 +33,8 @@ import { useAuth } from '../utils/AuthContext';
 
 const ResearcherDashboard = () => {
   const [activeTab, setActiveTab] = useState('datasets');
-  const { demoMode } = useDemo();
-  const { user, isAuthenticated } = useAuth();
+  const { demoMode, actor } = useDemo();
+  const { user, isAuthenticated, actor: authActor } = useAuth();
 
   // main data states
   const [bounties, setBounties] = useState([]);
@@ -398,17 +397,42 @@ const ResearcherDashboard = () => {
       }
 
       // ML pipeline: deid -> report
-      const job = await mlClient.createJob({ type: 'deid', input_uri: inputUri, consent_token: consentToken, params: { purpose: datasetRequestForm.researchPurpose } });
+      const deidJobRes = await authActor.create_ml_job('deid', inputUri, consentToken, [JSON.stringify({ purpose: datasetRequestForm.researchPurpose })]);
+      if (deidJobRes.Err) throw new Error(`De-id job creation failed: ${deidJobRes.Err}`);
+      const job = JSON.parse(deidJobRes.Ok);
       setMlJob(job);
       setMlStatus('queued');
 
-      const deidFinal = await mlClient.pollJob(job.id, { intervalMs: 1200, maxMs: 60000 });
+      // Polling for de-id job
+      let deidFinal;
+      const deidStart = Date.now();
+      while (Date.now() - deidStart < 60000) {
+        const pollRes = await authActor.get_ml_job(job.id);
+        if (pollRes.Ok) {
+          deidFinal = JSON.parse(pollRes.Ok);
+          if (deidFinal.status === 'succeeded' || deidFinal.status === 'failed') break;
+        }
+        await new Promise(r => setTimeout(r, 1200));
+      }
       setMlStatus(deidFinal.status || 'unknown');
       if (!deidFinal || deidFinal.status !== 'succeeded') throw new Error('De-identification failed');
 
       const anonUri = (deidFinal.artifacts && (deidFinal.artifacts.anonymized_uri || deidFinal.artifacts.anonymized_data_reference)) || inputUri;
-      const reportJob = await mlClient.createJob({ type: 'report', input_uri: anonUri, consent_token: consentToken });
-      const reportFinal = await mlClient.pollJob(reportJob.id, { intervalMs: 1200, maxMs: 60000 });
+      const reportJobRes = await authActor.create_ml_job('report', anonUri, consentToken, []);
+      if (reportJobRes.Err) throw new Error(`Report job creation failed: ${reportJobRes.Err}`);
+      const reportJob = JSON.parse(reportJobRes.Ok);
+
+      // Polling for report job
+      let reportFinal;
+      const reportStart = Date.now();
+      while (Date.now() - reportStart < 60000) {
+        const pollRes = await authActor.get_ml_job(reportJob.id);
+        if (pollRes.Ok) {
+          reportFinal = JSON.parse(pollRes.Ok);
+          if (reportFinal.status === 'succeeded' || reportFinal.status === 'failed') break;
+        }
+        await new Promise(r => setTimeout(r, 1200));
+      }
       setMlJob(reportFinal);
       setMlStatus(reportFinal.status || 'unknown');
 

@@ -1,14 +1,17 @@
-// Configure ML gateway via env if available, falls back to localhost for dev
-// e.g., set ML_GATEWAY_URL=https://ml.healthchain.dev
+// Configure ML gateway via env if available, falls back to render for prod
+// e.g., set VITE_ML_GATEWAY_URL=https://ml.healthchain.dev
 function getBaseUrl() {
   try {
+    // Prioritize environment variable over localStorage for production
+    const envUrl = import.meta.env?.VITE_ML_GATEWAY_URL || '';
+    if (envUrl) return envUrl.replace(/\/$/, '');
+
     const ls = typeof window !== 'undefined' ? window.localStorage : null;
     // accept either lowercase or uppercase env-style key
     const override = ls ? (ls.getItem('ml_gateway_url') || ls.getItem('ML_GATEWAY_URL')) : null;
     if (override && override.startsWith('http')) return override.replace(/\/$/, '');
   } catch {}
-  const envUrl = (typeof process !== 'undefined' && process.env && process.env.ML_GATEWAY_URL) || '';
-  return (envUrl || 'http://localhost:8001').replace(/\/$/, '');
+  return 'http://ml-service-9ar8.onrender.com/'.replace(/\/$/, '');
 }
 
 async function createJob({ type, input_uri, consent_token, params = {} }) {

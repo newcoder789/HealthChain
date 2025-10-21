@@ -34,7 +34,7 @@ const Demo = () => {
   ];
 
   return (
-    <div className="pt-24 pb-16 min-h-screen">
+    <div className="pt-24 pb-16 min-h-screen text-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div
@@ -49,13 +49,13 @@ const Demo = () => {
           </div>
 
           <h1 className="text-5xl md:text-6xl font-bold mb-6">
-            <span className="text-white">Welcome to</span>
+            <span className="text-gray-800">Welcome to</span>
             <br />
             <span className="gradient-text">HealthChain dApp</span>
           </h1>
 
-          <p className="text-xl text-gray-300 max-w-3xl mx-auto mb-8">
-            Experience the future of healthcare data management. Choose your role to explore 
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
+            Experience the future of healthcare data management. Choose your role to explore
             how HealthChain transforms medical records through decentralization.
           </p>
 
@@ -70,8 +70,8 @@ const Demo = () => {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="text-center mb-12"
           >
-            <h2 className="text-3xl font-bold text-white mb-4">Choose Your Role</h2>
-            <p className="text-lg text-gray-300">
+            <h2 className="text-3xl font-bold text-gray-800 mb-4">Choose Your Role</h2>
+            <p className="text-lg text-gray-600">
               Select a role to experience HealthChain from different perspectives
             </p>
           </motion.div>
@@ -93,12 +93,12 @@ const Demo = () => {
                   <role.icon className="h-8 w-8 text-white" />
                 </div>
 
-                <h3 className="text-2xl font-bold text-white mb-3 text-center">{role.name}</h3>
-                <p className="text-gray-300 mb-6 text-center">{role.description}</p>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3 text-center">{role.name}</h3>
+                <p className="text-gray-600 mb-6 text-center">{role.description}</p>
 
                 <ul className="space-y-2 mb-8">
                   {role.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-center text-gray-300">
+                    <li key={featureIndex} className="flex items-center text-gray-600">
                       <div className={`w-2 h-2 rounded-full mr-3 ${
                         role.color === 'primary' ? 'bg-primary-400' :
                         role.color === 'secondary' ? 'bg-secondary-400' :

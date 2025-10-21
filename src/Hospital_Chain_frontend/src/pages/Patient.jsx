@@ -89,20 +89,20 @@ const Patient = () => {
             <span className="text-sm text-primary-300 font-medium">Patient Portal</span>
           </div>
 
-          <h1 className="text-5xl md:text-6xl font-bold mb-6">
-            <span className="gradient-text">Your Health Data,</span>
+          <h1 className="text-5xl md:text-6xl font-bold text-gray-800 mb-6">
+            <span className="text-primary-600">Your Health Data,</span>
             <br />
-            <span className="text-white">Your Control</span>
+            <span>Your Control</span>
           </h1>
 
-          <p className="text-xl text-gray-300 max-w-3xl mx-auto mb-8">
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
             Take complete ownership of your medical records. Upload, organize, and share your health data
             with healthcare providers on your terms, with full transparency and security.
           </p>
           <button
             onClick={handleAccess}
             disabled={loading}
-            className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold rounded-xl hover:from-primary-600 hover:to-secondary-600 transform hover:scale-105 transition-all duration-200 neon-glow"
+            className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-semibold rounded-xl hover:from-primary-600 hover:to-secondary-600 transform hover:scale-105 transition-all duration-200 shadow-lg"
           >
             {loading ? "Preparing your dashboard..." : "Access Patient Dashboard"}
           </button>
@@ -124,9 +124,9 @@ const Patient = () => {
             transition={{ duration: 0.8 }}
             viewport={{ once: true }}
             className="text-center mb-16"
-          >
-            <h2 className="text-4xl font-bold gradient-text mb-6">Patient Features</h2>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+          > 
+            <h2 className="text-4xl font-bold text-gray-800 mb-6">Patient <span className="text-primary-600">Features</span></h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
               Everything you need to manage your health data with confidence and control
             </p>
           </motion.div>
@@ -153,9 +153,9 @@ const Patient = () => {
             transition={{ duration: 0.8 }}
             viewport={{ once: true }}
             className="text-center mb-16"
-          >
-            <h2 className="text-4xl font-bold gradient-text mb-6">Your Patient Journey</h2>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+          > 
+            <h2 className="text-4xl font-bold text-gray-800 mb-6">Your Patient <span className="text-primary-600">Journey</span></h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
               From setup to sharing - here's how HealthChain transforms your healthcare experience
             </p>
           </motion.div>
@@ -166,13 +166,13 @@ const Patient = () => {
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
               viewport={{ once: true }}
-              className="glass-card p-6 rounded-xl border border-white/20"
+              className="bg-white p-6 rounded-xl border border-gray-200 shadow-md"
             >
               <div className="w-12 h-12 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center mb-4">
                 <FileText className="h-6 w-6 text-white" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-3">1. Upload Records</h3>
-              <p className="text-gray-300">
+              <h3 className="text-xl font-bold text-gray-800 mb-3">1. Upload Records</h3>
+              <p className="text-gray-600">
                 Securely upload your existing medical records, test results, and documentation to your personal vault.
               </p>
             </motion.div>
@@ -182,13 +182,13 @@ const Patient = () => {
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
               viewport={{ once: true }}
-              className="glass-card p-6 rounded-xl border border-white/20"
+              className="bg-white p-6 rounded-xl border border-gray-200 shadow-md"
             >
               <div className="w-12 h-12 bg-gradient-to-br from-secondary-400 to-secondary-600 rounded-xl flex items-center justify-center mb-4">
                 <Share2 className="h-6 w-6 text-white" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-3">2. Share Selectively</h3>
-              <p className="text-gray-300">
+              <h3 className="text-xl font-bold text-gray-800 mb-3">2. Share Selectively</h3>
+              <p className="text-gray-600">
                 Choose exactly what to share with each healthcare provider, with time-limited access controls.
               </p>
             </motion.div>
@@ -198,13 +198,13 @@ const Patient = () => {
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.3 }}
               viewport={{ once: true }}
-              className="glass-card p-6 rounded-xl border border-white/20"
+              className="bg-white p-6 rounded-xl border border-gray-200 shadow-md"
             >
               <div className="w-12 h-12 bg-gradient-to-br from-accent-400 to-accent-600 rounded-xl flex items-center justify-center mb-4">
                 <Clock className="h-6 w-6 text-white" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-3">3. Monitor Access</h3>
-              <p className="text-gray-300">
+              <h3 className="text-xl font-bold text-gray-800 mb-3">3. Monitor Access</h3>
+              <p className="text-gray-600">
                 Track all interactions with your data through comprehensive audit logs and real-time notifications.
               </p>
             </motion.div>
@@ -218,21 +218,21 @@ const Patient = () => {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
             viewport={{ once: true }}
-            className="glass-card p-12 rounded-2xl border border-primary-400/30 text-center"
+            className="bg-white p-12 rounded-2xl border border-gray-200 text-center shadow-lg"
           >
-            <h2 className="text-3xl font-bold text-white mb-8">Patient Benefits</h2>
+            <h2 className="text-3xl font-bold text-gray-800 mb-8">Patient Benefits</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div>
                 <div className="text-4xl font-bold text-primary-400 mb-2">100%</div>
-                <p className="text-gray-300">Data Ownership</p>
+                <p className="text-gray-600">Data Ownership</p>
               </div>
               <div>
                 <div className="text-4xl font-bold text-secondary-400 mb-2">24/7</div>
-                <p className="text-gray-300">Record Access</p>
+                <p className="text-gray-600">Record Access</p>
               </div>
               <div>
                 <div className="text-4xl font-bold text-accent-400 mb-2">0</div>
-                <p className="text-gray-300">Data Breaches</p>
+                <p className="text-gray-600">Data Breaches</p>
               </div>
             </div>
           </motion.div>

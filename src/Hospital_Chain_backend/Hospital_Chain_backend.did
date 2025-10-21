@@ -89,16 +89,17 @@ type PublicStats = record {
 type RequestStatus = variant { Approved; Denied; Pending };
 type Result = variant { Ok : text; Err : text };
 type Result_1 = variant { Ok; Err : text };
-type Result_10 = variant { Ok : PrivacySettings; Err : text };
-type Result_11 = variant { Ok : vec SharedRecordInfo; Err : text };
+type Result_10 = variant { Ok : User; Err : text };
+type Result_11 = variant { Ok : PrivacySettings; Err : text };
+type Result_12 = variant { Ok : vec SharedRecordInfo; Err : text };
 type Result_2 = variant { Ok : record { nat64; nat64; nat64 }; Err : text };
 type Result_3 = variant { Ok : vec ActiveShare; Err : text };
 type Result_4 = variant { Ok : vec AuditLogEntry; Err : text };
-type Result_5 = variant { Ok : vec MedicalRecord; Err : text };
-type Result_6 = variant { Ok : vec AccessRequest; Err : text };
-type Result_7 = variant { Ok : vec User; Err : text };
-type Result_8 = variant { Ok : principal; Err : text };
-type Result_9 = variant { Ok : User; Err : text };
+type Result_5 = variant { Ok : blob; Err : text };
+type Result_6 = variant { Ok : vec MedicalRecord; Err : text };
+type Result_7 = variant { Ok : vec AccessRequest; Err : text };
+type Result_8 = variant { Ok : vec User; Err : text };
+type Result_9 = variant { Ok : principal; Err : text };
 type Sex = variant { Male; Female; Other };
 type SharedRecordInfo = record {
   owner_is_verified : bool;
@@ -137,6 +138,7 @@ type UserProfile = record {
   name : opt text;
   nationality : opt text;
   email : opt text;
+  encryption_public_key : opt text;
   ethnicity : opt text;
   phone_hash : opt text;
 };
@@ -157,23 +159,33 @@ service : () -> {
   approve_access_request : (text) -> (Result_1);
   approve_identity : (principal) -> (Result_1);
   create_folder : (text, opt text) -> (Result);
+  create_ml_job : (text, text, text, opt text) -> (Result);
   deny_access_request : (text) -> (Result_1);
   get_dashboard_stats : () -> (Result_2) query;
+  get_ml_job : (text) -> (Result);
   get_my_active_shares : () -> (Result_3) query;
   get_my_audit_log : () -> (Result_4) query;
-  get_my_records : () -> (Result_5) query;
-  get_my_sent_requests : () -> (Result_6) query;
+  // Grantee calls this to retrieve their wrapped AES key (if authorized). Returns Err if not authorized or not found.
+  get_my_encrypted_key_for_record : (text) -> (Result_5) query;
+  get_my_records : () -> (Result_6) query;
+  get_my_sent_requests : () -> (Result_7) query;
   get_or_create_user_profile : () -> (User);
-  get_pending_requests : () -> (Result_6) query;
-  get_pending_verifications : () -> (Result_7) query;
-  get_principal_by_name : (text) -> (Result_8) query;
-  get_profile : () -> (Result_9) query;
-  get_settings : () -> (Result_10) query;
+  get_pending_requests : () -> (Result_7) query;
+  get_pending_verifications : () -> (Result_8) query;
+  get_principal_by_name : (text) -> (Result_9) query;
+  get_profile : () -> (Result_10) query;
+  get_settings : () -> (Result_11) query;
   grant_access : (text, principal, AccessPermission) -> (Result_1);
+  health_check_ml : () -> (Result);
+  remove_encrypted_key_for_principal : (text, text) -> (Result_1);
   request_access_to_record : (text, text) -> (Result);
   revoke_access : (text, principal) -> (Result_1);
-  search_patients_by_name : (text) -> (Result_7) query;
-  shared_with_me : () -> (Result_11) query;
+  search_patients_by_name : (text) -> (Result_8) query;
+  shared_with_me : () -> (Result_12) query;
+  // Owner stores an encrypted AES key blob for a specific principal (grantee).
+  store_encrypted_key_for_principal : (text, blob, text, opt nat64) -> (
+      Result_1,
+    );
   submit_for_research : (text) -> (Result_1);
   submit_identity_verification : (text) -> (Result_1);
   submit_ml_report : (text, text) -> (Result_1);
@@ -181,4 +193,5 @@ service : () -> {
   update_settings : (PrivacySettings) -> (Result_1);
   update_user_name : (text) -> (Result);
   upload_record : (text, text, text, opt text, nat64) -> (Result);
+  validate_ml_direct : (blob, opt text) -> (Result);
 }

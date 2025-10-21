@@ -27,7 +27,7 @@
       },
     "Hospital_Chain_frontend": {
       "dependencies": [
-        "Hospital_Chain_backend", "dataset_manager", "research_marketplace", "icrc1_ledger", "internet_identity"
+        "Hospital_Chain_backend", "internet_identity"
       ],
       "source": [
         "src/Hospital_Chain_frontend/dist"

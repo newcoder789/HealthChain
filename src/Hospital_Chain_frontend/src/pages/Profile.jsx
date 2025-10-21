@@ -18,7 +18,7 @@ import {
   Activity,
   Server
 } from 'lucide-react';
-import { mlClient } from '../utils/mlClient';
+import { generateRSAKeyPair } from '../utils/cryptoKeys';
 import { useAuth } from '../utils/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Toast } from '../components/Toast';
@@ -183,7 +183,8 @@ const Profile = () => {
           sex: userData.profile.sex ? [{ [userData.profile.sex]: null }] : [],
           ethnicity: userData.profile.ethnicity ? [userData.profile.ethnicity] : [],
           meta: [],
-          nationality: userData.profile.nationality ? [userData.profile.nationality] : []
+          nationality: userData.profile.nationality ? [userData.profile.nationality] : [],
+          encryption_public_key: user?.profile?.[0]?.encryption_public_key || []
         };
         const result = await actor.update_profile(profileUpdate);
         if (result.Ok) {
@@ -200,6 +201,38 @@ const Profile = () => {
     } catch (error) {
       console.error('Error updating profile:', error);
       showToast('An unexpected error occurred while updating your profile. Please try again.', 'error');
+    }
+  };
+
+  const handleGenerateKeys = async () => {
+    try {
+      const pair = await generateRSAKeyPair();
+      // Offer to publish public PEM to canister
+      if (actor) {
+        const publish = window.confirm('Publish generated public key to your profile so others can share encrypted keys with you?');
+        if (publish) {
+          const res = await actor.publish_public_pem(pair.publicPem);
+          if (res.Ok) {
+            showToast('Public key published to profile meta.', 'success');
+          } else {
+            showToast(`Failed to publish public key: ${res.Err}`, 'error');
+          }
+        }
+      }
+      // Always allow user to download private key PEM
+      const blob = new Blob([pair.privatePem], { type: 'application/x-pem-file' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'healthchain_private_key.pem';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Private key PEM downloaded. Keep it safe.', 'success');
+    } catch (e) {
+      console.error('Key generation failed', e);
+      showToast('Key generation failed. See console for details.', 'error');
     }
   };
 
@@ -292,8 +325,13 @@ const Profile = () => {
 
   const handleTestMl = async () => {
     setMlHealth(null);
-    const res = await mlClient.health();
-    setMlHealth(res.ok ? res.data : { ok: false });
+    try {
+      const res = await actor.health_check_ml();
+      setMlHealth(res.Ok ? { ok: true, data: JSON.parse(res.Ok) } : { ok: false });
+    } catch (e) {
+      console.error("ML health check failed", e);
+      setMlHealth({ ok: false });
+    }
   };
 
   const handleMlChange = (e) => {
@@ -343,7 +381,7 @@ const Profile = () => {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AnimatePresence>
 
-    <div className="pt-24 pb-16 min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="pt-24 pb-16 min-h-screen bg-gray-50 text-gray-800">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div
@@ -352,10 +390,10 @@ const Profile = () => {
           transition={{ duration: 0.8 }}
           className="mb-8"
         >
-          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-cyan-300 mb-4">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
             Profile Settings
           </h1>
-          <p className="text-xl text-blue-200">
+          <p className="text-xl text-gray-600">
             Manage your account and privacy preferences
           </p>
         </motion.div>
@@ -367,13 +405,13 @@ const Profile = () => {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
-              className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/60 to-indigo-800/60 shadow-lg mb-6"
+              className="bg-white p-6 rounded-xl border border-gray-200 shadow-md mb-6"
             >
               <div className="text-center">
                 <div className="w-24 h-24 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center">
                   <RoleIcon className="h-12 w-12 text-white" />
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-2">
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">
                   {userData.profile.displayName}
                 </h2>
                 <p className={`text-lg font-medium ${getRoleColor(userData.profile.role)}`}>
@@ -390,27 +428,27 @@ const Profile = () => {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.1 }}
-              className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/60 to-indigo-800/60 shadow-lg"
+              className="bg-white p-6 rounded-xl border border-gray-200 shadow-md"
             >
-              <h3 className="text-lg font-semibold text-white mb-4">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
                 Account Stats
               </h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Total Records</span>
-                  <span className="text-white font-semibold">{userData.profile.totalRecords}</span>
+                  <span className="text-gray-600">Total Records</span>
+                  <span className="text-gray-800 font-semibold">{userData.profile.totalRecords}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Shared Records</span>
-                  <span className="text-white font-semibold">{userData.profile.sharedRecords}</span>
+                  <span className="text-gray-600">Shared Records</span>
+                  <span className="text-gray-800 font-semibold">{userData.profile.sharedRecords}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Access Count</span>
-                  <span className="text-white font-semibold">{userData.profile.accessCount}</span>
+                  <span className="text-gray-600">Access Count</span>
+                  <span className="text-gray-800 font-semibold">{userData.profile.accessCount}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Last Active</span>
-                  <span className="text-white font-semibold">{userData.profile.lastActive}</span>
+                  <span className="text-gray-600">Last Active</span>
+                  <span className="text-gray-800 font-semibold">{userData.profile.lastActive}</span>
                 </div>
               </div>
             </motion.div>
@@ -425,15 +463,15 @@ const Profile = () => {
               className="space-y-6"
             >
               {/* Personal Information */}
-              <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
+              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-semibold text-white">
+                  <h3 className="text-xl font-semibold text-gray-800">
                     Personal Information
                   </h3>
                   {!isEditing ? (
                     <button
                       onClick={handleEdit}
-                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+                      className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors duration-200"
                     >
                       <Edit3 className="h-4 w-4 mr-2" />
                       Edit
@@ -442,14 +480,14 @@ const Profile = () => {
                     <div className="flex space-x-2">
                       <button
                         onClick={handleSave}
-                        className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200"
+                        className="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors duration-200"
                       >
                         <Save className="h-4 w-4 mr-2" />
                         Save
                       </button>
                       <button
                         onClick={handleCancel}
-                        className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors duration-200"
+                        className="inline-flex items-center px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors duration-200"
                       >
                         <X className="h-4 w-4 mr-2" />
                         Cancel
@@ -460,7 +498,7 @@ const Profile = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Display Name
                     </label>
                     {isEditing ? (
@@ -469,15 +507,15 @@ const Profile = () => {
                         name="displayName"
                         value={userData.profile.displayName}
                         onChange={handleProfileChange}
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                        className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                       />
                     ) : (
-                      <p className="text-white">{userData.profile.displayName}</p>
+                      <p className="text-gray-800">{userData.profile.displayName}</p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Email
                     </label>
                     {isEditing ? (
@@ -486,15 +524,15 @@ const Profile = () => {
                         name="email"
                         value={userData.profile.email}
                         onChange={handleProfileChange}
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                        className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                       />
                     ) : (
-                      <p className="text-white">{userData.profile.email}</p>
+                      <p className="text-gray-800">{userData.profile.email}</p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Role
                     </label>
                     <p className={`text-lg font-medium ${getRoleColor(userData.profile.role)}`}>
@@ -503,16 +541,16 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Principal ID
                     </label>
                     <div className="flex items-center space-x-2">
-                      <p className="text-white font-mono text-sm">{userData.profile.principalId}</p>
+                      <p className="text-gray-800 font-mono text-sm truncate">{userData.profile.principalId}</p>
                       <button
                         onClick={() =>
                           navigator.clipboard.writeText(userData.profile.principalId)
                         }
-                        className="p-1 hover:bg-gray-700 rounded transition-colors duration-200"
+                        className="p-1 hover:bg-gray-100 rounded transition-colors duration-200"
                       >
                         <Key className="h-4 w-4 text-gray-400" />
                       </button>
@@ -521,7 +559,7 @@ const Profile = () => {
 
                   {/* Bio */}
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Bio
                     </label>
                     {isEditing ? (
@@ -529,17 +567,17 @@ const Profile = () => {
                         name="bio"
                         value={userData.profile.bio}
                         onChange={handleProfileChange}
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400 h-24"
+                        className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-primary-500 focus:border-primary-500 h-24"
                         placeholder="Tell us a bit about yourself..."
                       />
                     ) : (
-                      <p className="text-white whitespace-pre-wrap">{userData.profile.bio || 'Not set'}</p>
+                      <p className="text-gray-800 whitespace-pre-wrap">{userData.profile.bio || 'Not set'}</p>
                     )}
                   </div>
 
                   {/* Age */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Age
                     </label>
                     {isEditing ? (
@@ -548,16 +586,16 @@ const Profile = () => {
                         name="age"
                         value={userData.profile.age}
                         onChange={handleProfileChange}
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                        className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                       />
                     ) : (
-                      <p className="text-white">{userData.profile.age || 'Not set'}</p>
+                      <p className="text-gray-800">{userData.profile.age || 'Not set'}</p>
                     )}
                   </div>
 
                   {/* Sex */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Sex
                     </label>
                     {isEditing ? (
@@ -565,7 +603,7 @@ const Profile = () => {
                         name="sex"
                         value={userData.profile.sex}
                         onChange={handleProfileChange}
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                        className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                       >
                         <option value="">Select...</option>
                         <option value="Male">Male</option>
@@ -573,31 +611,31 @@ const Profile = () => {
                         <option value="Other">Other</option>
                       </select>
                     ) : (
-                      <p className="text-white">{userData.profile.sex || 'Not set'}</p>
+                      <p className="text-gray-800">{userData.profile.sex || 'Not set'}</p>
                     )}
                   </div>
 
                   {/* Ethnicity and Nationality */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Ethnicity</label>
-                    {isEditing ? <input type="text" name="ethnicity" value={userData.profile.ethnicity} onChange={handleProfileChange} className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white" /> : <p className="text-white">{userData.profile.ethnicity || 'Not set'}</p>}
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Ethnicity</label>
+                    {isEditing ? <input type="text" name="ethnicity" value={userData.profile.ethnicity} onChange={handleProfileChange} className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-primary-500 focus:border-primary-500" /> : <p className="text-gray-800">{userData.profile.ethnicity || 'Not set'}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Nationality</label>
-                    {isEditing ? <input type="text" name="nationality" value={userData.profile.nationality} onChange={handleProfileChange} className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white" /> : <p className="text-white">{userData.profile.nationality || 'Not set'}</p>}
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nationality</label>
+                    {isEditing ? <input type="text" name="nationality" value={userData.profile.nationality} onChange={handleProfileChange} className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-primary-500 focus:border-primary-500" /> : <p className="text-gray-800">{userData.profile.nationality || 'Not set'}</p>}
                   </div>
                   </div>
               </div>
 
               {/* Notifications */}
-              <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
+              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-semibold text-white">
+                  <h3 className="text-xl font-semibold text-gray-800">
                     Notification Preferences
                   </h3>
                   <button
                     onClick={handleSaveSettings}
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+                    className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors duration-200"
                   >
                     <Save className="h-4 w-4 mr-2" />
                     Save Settings
@@ -607,8 +645,8 @@ const Profile = () => {
                   {/* Email Updates */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Email Updates</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Email Updates</p>
+                      <p className="text-gray-600 text-sm">
                         Receive updates about your account and system changes
                       </p>
                     </div>
@@ -620,7 +658,7 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                         {/* Toggle knob */}
                       </div>
                     </label>
@@ -628,8 +666,8 @@ const Profile = () => {
                   {/* Access Alerts */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Access Alerts</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Access Alerts</p>
+                      <p className="text-gray-600 text-sm">
                         Get notified when someone accesses your records
                       </p>
                     </div>
@@ -641,15 +679,15 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                       </div>
                     </label>
                   </div>
                   {/* Security Alerts */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Security Alerts</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Security Alerts</p>
+                      <p className="text-gray-600 text-sm">
                         Receive security-related notifications
                       </p>
                     </div>
@@ -661,15 +699,15 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                       </div>
                     </label>
                   </div>
                   {/* Research Updates */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Research Updates</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Research Updates</p>
+                      <p className="text-gray-600 text-sm">
                         Get updates about research opportunities and findings
                       </p>
                     </div>
@@ -681,7 +719,7 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                       </div>
                     </label>
                   </div>
@@ -690,18 +728,18 @@ const Profile = () => {
               </div>
 
               {/* Privacy Settings */}
-              <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
-                <h3 className="text-xl font-semibold text-white mb-6">Privacy Settings</h3>
+              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md">
+                <h3 className="text-xl font-semibold text-gray-800 mb-6">Privacy Settings</h3>
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Profile Visibility
                     </label>
                     <select
                       name="profile_visibility"
                       value={userData.settings.profile_visibility}
                       onChange={handleSettingsChange}
-                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     >
                       <option value="private">Private</option>
                       <option value="public">Public</option>
@@ -711,8 +749,8 @@ const Profile = () => {
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Allow Research Use</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Allow Research Use</p>
+                      <p className="text-gray-600 text-sm">
                         Allow your data to be used for research purposes
                       </p>
                     </div>
@@ -724,15 +762,15 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                       </div>
                     </label>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Show Public Stats</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Show Public Stats</p>
+                      <p className="text-gray-600 text-sm">
                         Display your contribution statistics publicly
                       </p>
                     </div>
@@ -744,15 +782,15 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                       </div>
                     </label>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Require Manual Approval</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Require Manual Approval</p>
+                      <p className="text-gray-600 text-sm">
                         Require manual approval for all data access requests
                       </p>
                     </div>
@@ -764,15 +802,15 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                       </div>
                     </label>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Watermark on View</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Watermark on View</p>
+                      <p className="text-gray-600 text-sm">
                         Add watermark when records are viewed
                       </p>
                     </div>
@@ -784,15 +822,15 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                       </div>
                     </label>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Notify on Access</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Notify on Access</p>
+                      <p className="text-gray-600 text-sm">
                         Get notified when your records are accessed
                       </p>
                     </div>
@@ -804,14 +842,14 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                       </div>
                     </label>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Auto Expire Days</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Auto Expire Days</p>
+                      <p className="text-gray-600 text-sm">
                         Set in how many days your shared data should expire automatically.
                       </p>
                     </div>
@@ -821,14 +859,14 @@ const Profile = () => {
                       value={userData.settings.auto_expire_days || ''}
                       onChange={handleSettingsChange}
                       placeholder="Days"
-                      className="w-24 bg-gray-800 border border-gray-600 rounded-lg px-3 py-1 text-white text-center focus:outline-none focus:border-blue-400"
+                      className="w-24 bg-white border border-gray-300 rounded-lg px-3 py-1 text-gray-800 text-center focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     />
                   </div>
                 </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-white font-medium">Analytics & Usage Data</p>
-                      <p className="text-gray-400 text-sm">
+                      <p className="text-gray-800 font-medium">Analytics & Usage Data</p>
+                      <p className="text-gray-600 text-sm">
                         Help improve the platform by sharing anonymous usage data
                       </p>
                     </div>
@@ -840,7 +878,7 @@ const Profile = () => {
                         onChange={handleSettingsChange}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-all">
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                       </div>
                     </label>
                   </div>
@@ -848,13 +886,13 @@ const Profile = () => {
               </div>
 
               {/* ML Settings */}
-              <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
-                <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md">
+                <h3 className="text-xl font-semibold text-gray-800 mb-6 flex items-center">
                   <Server className="h-5 w-5 mr-2" /> ML Settings
                 </h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Gateway URL
                     </label>
                     <input
@@ -862,23 +900,23 @@ const Profile = () => {
                       name="mlUrl"
                       value={userData.mlUrl}
                       onChange={handleMlChange}
-                      placeholder="http://localhost:8001"
-                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-400"
+                      placeholder="http://ml-service-9ar8.onrender.com/"
+                      className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-800 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     />
-                    <p className="text-gray-400 text-xs mt-1">
+                    <p className="text-gray-600 text-xs mt-1">
                       Overrides ML_GATEWAY_URL. Stored in your browser only.
                     </p>
                   </div>
                   <div className="flex gap-3">
                     <button
                       onClick={handleSaveMl}
-                      className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700"
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                     >
                       Save
                     </button>
                     <button
                       onClick={handleTestMl}
-                      className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600"
+                      className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
                     >
                       Test Connection
                     </button>
@@ -886,7 +924,7 @@ const Profile = () => {
                   {mlHealth && (
                     <div className="mt-2 text-sm text-gray-300">
                       {mlHealth.ok === false ? (
-                        <span className="text-red-400">Connection failed</span>
+                        <span className="text-red-500">Connection failed</span>
                       ) : (
                         <span className="text-emerald-400">OK</span>
                       )}
@@ -896,26 +934,26 @@ const Profile = () => {
               </div>
 
               {/* Security Actions */}
-              <div className="glass-card p-6 rounded-xl border border-blue-400/20 bg-gradient-to-br from-blue-900/70 to-indigo-800/70 shadow-lg">
-                <h3 className="text-xl font-semibold text-white mb-6">Security</h3>
+              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-md">
+                <h3 className="text-xl font-semibold text-gray-800 mb-6">Security</h3>
                 <div className="space-y-4">
-                  <button className="w-full flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors duration-200">
+                  <button className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200 border border-gray-200">
                     <div className="flex items-center space-x-3">
                       <Lock className="h-5 w-5 text-gray-400" />
                       <div className="text-left">
-                        <p className="text-white font-medium">Change Password</p>
-                        <p className="text-gray-400 text-sm">Update your account password</p>
+                        <p className="text-gray-800 font-medium">Change Password</p>
+                        <p className="text-gray-600 text-sm">Update your account password</p>
                       </div>
                     </div>
                     <Key className="h-4 w-4 text-gray-400" />
                   </button>
 
-                  <button className="w-full flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors duration-200">
+                  <button className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200 border border-gray-200">
                     <div className="flex items-center space-x-3">
                       <Activity className="h-5 w-5 text-gray-400" />
                       <div className="text-left">
-                        <p className="text-white font-medium">View Login History</p>
-                        <p className="text-gray-400 text-sm">Check recent account activity</p>
+                        <p className="text-gray-800 font-medium">View Login History</p>
+                        <p className="text-gray-600 text-sm">Check recent account activity</p>
                       </div>
                     </div>
                     <Eye className="h-4 w-4 text-gray-400" />
