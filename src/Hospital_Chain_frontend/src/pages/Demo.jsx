@@ -34,7 +34,7 @@ const Demo = () => {
   ];
 
   return (
-    <div className="pt-24 pb-16 min-h-screen">
+    <div className="pt-24 pb-16 min-h-screen text-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div
@@ -49,31 +49,17 @@ const Demo = () => {
           </div>
 
           <h1 className="text-5xl md:text-6xl font-bold mb-6">
-            <span className="text-white">Welcome to</span>
+            <span className="text-gray-800">Welcome to</span>
             <br />
             <span className="gradient-text">HealthChain dApp</span>
           </h1>
 
-          <p className="text-xl text-gray-300 max-w-3xl mx-auto mb-8">
-            Experience the future of healthcare data management. Choose your role to explore 
+          <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
+            Experience the future of healthcare data management. Choose your role to explore
             how HealthChain transforms medical records through decentralization.
           </p>
 
-          {/* Theme Toggle */}
-          <div className="flex items-center justify-center space-x-4 mb-12">
-            <span className="text-gray-300">Theme:</span>
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className={`flex items-center px-4 py-2 rounded-lg transition-all duration-200 ${
-                darkMode 
-                  ? 'bg-gray-800 text-gray-300' 
-                  : 'bg-white text-gray-800'
-              }`}
-            >
-              {darkMode ? <Moon className="h-4 w-4 mr-2" /> : <Sun className="h-4 w-4 mr-2" />}
-              {darkMode ? 'Dark' : 'Light'}
-            </button>
-          </div>
+          {/* Theme Toggle removed for demo stability */}
         </motion.div>
 
         {/* Role Selection */}
@@ -84,8 +70,8 @@ const Demo = () => {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="text-center mb-12"
           >
-            <h2 className="text-3xl font-bold text-white mb-4">Choose Your Role</h2>
-            <p className="text-lg text-gray-300">
+            <h2 className="text-3xl font-bold text-gray-800 mb-4">Choose Your Role</h2>
+            <p className="text-lg text-gray-600">
               Select a role to experience HealthChain from different perspectives
             </p>
           </motion.div>
@@ -107,12 +93,12 @@ const Demo = () => {
                   <role.icon className="h-8 w-8 text-white" />
                 </div>
 
-                <h3 className="text-2xl font-bold text-white mb-3 text-center">{role.name}</h3>
-                <p className="text-gray-300 mb-6 text-center">{role.description}</p>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3 text-center">{role.name}</h3>
+                <p className="text-gray-600 mb-6 text-center">{role.description}</p>
 
                 <ul className="space-y-2 mb-8">
                   {role.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-center text-gray-300">
+                    <li key={featureIndex} className="flex items-center text-gray-600">
                       <div className={`w-2 h-2 rounded-full mr-3 ${
                         role.color === 'primary' ? 'bg-primary-400' :
                         role.color === 'secondary' ? 'bg-secondary-400' :
@@ -138,75 +124,6 @@ const Demo = () => {
               </motion.div>
             ))}
           </div>
-        </section>
-
-        {/* Internet Identity Simulation */}
-        <section className="mb-20">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="glass-card p-8 rounded-2xl border border-primary-400/30"
-          >
-            <div className="text-center mb-8">
-              <Shield className="h-12 w-12 text-primary-400 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-white mb-4">Internet Identity Authentication</h2>
-              <p className="text-gray-300">
-                In a real deployment, you would authenticate using Internet Identity for secure, 
-                privacy-preserving access to your HealthChain account.
-              </p>
-            </div>
-
-            <div className="bg-primary-500/10 border border-primary-500/30 rounded-lg p-6">
-              <div className="flex items-center justify-center space-x-4 mb-4">
-                <div className="w-3 h-3 bg-primary-400 rounded-full animate-pulse"></div>
-                <span className="text-primary-300 font-medium">Simulated Authentication Mode</span>
-                <div className="w-3 h-3 bg-primary-400 rounded-full animate-pulse"></div>
-              </div>
-              <p className="text-center text-gray-300 text-sm">
-                This demo simulates Internet Identity login for demonstration purposes. 
-                In production, you would use your cryptographic identity for secure access.
-              </p>
-            </div>
-          </motion.div>
-        </section>
-
-        {/* Demo Instructions */}
-        <section>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.6 }}
-            className="text-center"
-          >
-            <h2 className="text-3xl font-bold gradient-text mb-8">Demo Instructions</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="glass-card p-6 rounded-xl border border-white/20">
-                <div className="text-2xl font-bold text-primary-400 mb-4">1</div>
-                <h3 className="text-lg font-bold text-white mb-3">Select Role</h3>
-                <p className="text-gray-300 text-sm">
-                  Choose Patient, Doctor, or Researcher to explore different features and workflows.
-                </p>
-              </div>
-
-              <div className="glass-card p-6 rounded-xl border border-white/20">
-                <div className="text-2xl font-bold text-secondary-400 mb-4">2</div>
-                <h3 className="text-lg font-bold text-white mb-3">Explore Features</h3>
-                <p className="text-gray-300 text-sm">
-                  Interact with the dashboard, upload records, manage permissions, and view audit logs.
-                </p>
-              </div>
-
-              <div className="glass-card p-6 rounded-xl border border-white/20">
-                <div className="text-2xl font-bold text-accent-400 mb-4">3</div>
-                <h3 className="text-lg font-bold text-white mb-3">Experience Benefits</h3>
-                <p className="text-gray-300 text-sm">
-                  See how HealthChain solves real healthcare data challenges through decentralization.
-                </p>
-              </div>
-            </div>
-          </motion.div>
         </section>
       </div>
     </div>

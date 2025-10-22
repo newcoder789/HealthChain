@@ -1,13 +1,33 @@
+
 {
+  "version": 1,
   "canisters": {
     "Hospital_Chain_backend": {
       "candid": "src/Hospital_Chain_backend/Hospital_Chain_backend.did",
       "package": "Hospital_Chain_backend",
       "type": "rust"
     },
+    "dataset_manager": {
+        "type": "rust",
+        "package": "dataset_manager",
+        "candid": "src/dataset_manager/dataset_manager.did",
+        "dependencies": ["Hospital_Chain_backend"]
+      },
+      "research_marketplace": {
+        "type": "custom",
+        "init_arg": "(principal \"umunu-kh777-77774-qaaca-cai\")",
+        "wasm": "target/wasm32-unknown-unknown/release/research_marketplace.wasm",
+        "candid": "src/research_marketplace/research_marketplace.did",
+        "build": "bash -lc 'cargo build --release --target wasm32-unknown-unknown'"
+      },
+      "icrc1_ledger": {
+        "type": "rust",
+        "package": "icrc1_ledger",
+        "candid": "src/icrc1_ledger/icrc1_ledger.did"
+      },
     "Hospital_Chain_frontend": {
       "dependencies": [
-        "Hospital_Chain_backend"
+        "Hospital_Chain_backend", "internet_identity"
       ],
       "source": [
         "src/Hospital_Chain_frontend/dist"
@@ -33,6 +53,5 @@
       "packtool": ""
     }
   },
-  "output_env_file": ".env",
-  "version": 1
+  "output_env_file": ".env"
 }

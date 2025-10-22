@@ -10,43 +10,44 @@ import Demo from './pages/Demo';
 import PatientDashboard from './pages/PatientDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
 import ResearcherDashboard from './pages/ResearcherDashboard';
+import RecordViewer from './pages/RecordViewer';
+import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
 import './index.scss';
-import { useAuth } from './utils/AuthContext';
+import AdminPortal from './pages/AdminPortal';
+import DeveloperOverlayBanner from './components/DeveloperOverlay';
+import JudgeTour from './components/JudgeTour';
+import { DemoProvider } from './utils/DemoContext';
+import { AuthProvider, useAuth } from './utils/AuthContext';
 import React, { useEffect } from 'react';
 
 // New component to handle routing logic and hooks
 function AppRouter() {
-  const { isAuthenticated, userRole, registerUser, isAuthReady } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  // useEffect(() => {
-  //   if (isAuthReady && isAuthenticated && userRole === null) {
-  //     const pathSegments = location.pathname.split('/');
-  //     const roleFromPath = pathSegments[2];
-
-  //     if (roleFromPath) {
-  //       const roleToRegister = roleFromPath.charAt(0).toUpperCase() + roleFromPath.slice(1);
-  //       registerUser(roleToRegister);
-  //     } else {
-  //       navigate('/');
-  //     }
-  //   }
-  // }, [isAuthReady, isAuthenticated, userRole, location.pathname, navigate, registerUser]);
-
+  const { isAuthenticated } = useAuth();
   return (
     <>
       <Navbar />
       <Routes>
+        {/* Public Routes */}
         <Route path="/" element={<Home />} />
-        <Route path="/patient" element={<Patient />} />
-        <Route path="/doctor" element={<Doctor />} />
-        <Route path="/researcher" element={<Researcher />} />
-        <Route path="/demo" element={<Demo />} />
-        <Route path="/dashboard/patient" element={<PatientDashboard />} />
-        <Route path="/dashboard/doctor" element={<DoctorDashboard />} />
-        <Route path="/dashboard/researcher" element={<ResearcherDashboard />} />
+        <Route path="/patient-info" element={<Patient />} />
+        <Route path="/doctor-info" element={<Doctor />} />
+        <Route path="/researcher-info" element={<Researcher />} />
+
+        {/* Protected Routes */}
+        {isAuthenticated && (
+          <>
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/admin" element={<AdminPortal />} />
+            <Route path="/dashboard/patient" element={<PatientDashboard />} />
+            <Route path="/dashboard/doctor" element={<DoctorDashboard />} />
+            <Route path="/dashboard/researcher" element={<ResearcherDashboard />} />
+            <Route path="/view-record/:recordId" element={<RecordViewer />} />
+            <Route path="/demo" element={<Demo />} />
+          </>
+        )}
+
+        {/* Catch-all Route */}
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />
@@ -54,13 +55,19 @@ function AppRouter() {
   );
 }
 
+function AppContent() {
+  return (
+    <div className="min-h-screen bg-gray-100 text-gray-800">
+      <AppRouter />
+      <DeveloperOverlayBanner />
+      <JudgeTour />
+    </div>
+  );
+}
+
 function App() {
   return (
-    <Router>
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-        <AppRouter />
-      </div>
-    </Router>
+    <Router><AuthProvider><DemoProvider><AppContent /></DemoProvider></AuthProvider></Router>
   );
 }
 

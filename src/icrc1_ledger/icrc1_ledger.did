@@ -1,0 +1,29 @@
+type Account = record { owner : principal; subaccount : opt blob };
+type MetadataValue = variant { Int : int; Nat : nat; Blob : blob; Text : text };
+type Result = variant { Ok : nat; Err : TransferError };
+type Standard = record { url : text; name : text };
+type TransferArgs = record {
+  to : Account;
+  fee : opt nat;
+  memo : opt blob;
+  from_subaccount : opt blob;
+  created_at_time : opt nat64;
+  amount : nat;
+};
+type TransferError = variant {
+  GenericError : record { message : text; error_code : nat };
+  BadFee : record { expected_fee : nat };
+  InsufficientFunds : record { balance : nat };
+};
+service : () -> {
+  icrc1_balance_of : (Account) -> (nat) query;
+  icrc1_decimals : () -> (nat8) query;
+  icrc1_fee : () -> (nat) query;
+  icrc1_metadata : () -> (vec record { text; MetadataValue }) query;
+  icrc1_minting_account : () -> (opt Account) query;
+  icrc1_name : () -> (text) query;
+  icrc1_supported_standards : () -> (vec Standard) query;
+  icrc1_symbol : () -> (text) query;
+  icrc1_total_supply : () -> (nat) query;
+  icrc1_transfer : (TransferArgs) -> (Result);
+}

@@ -14,5 +14,8 @@
   "type": "module",
   "workspaces": [
     "src/Hospital_Chain_frontend"
-  ]
+  ],
+  "dependencies": {
+    "nft.storage": "^7.2.0"
+  }
 }

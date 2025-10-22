@@ -4,7 +4,19 @@ import FeatureCard from '../components/FeatureCard';
 import Timeline from '../components/Timeline';
 import { Shield, Users, Activity, Database, Lock, Zap, Globe, Cpu } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../utils/AuthContext';
+import { useEffect } from 'react';
 const Home = () => {
+  const {actor, isAuthenticated} = useAuth();
+  useEffect(() => {
+    const add_user = async () =>{
+      if(isAuthenticated){
+        await actor.get_or_create_user_profile().then((profile) => console.log("USER REGISTERED", profile))
+      }
+    }
+    add_user();
+  }, [isAuthenticated])
+  
   const features = [
     {
       icon: Shield,

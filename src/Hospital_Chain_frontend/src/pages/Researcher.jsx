@@ -2,9 +2,33 @@ import { motion } from 'framer-motion';
 import { Microscope, Database, BarChart3, Users, Shield, Brain, Globe, Zap } from 'lucide-react';
 import RoleDiagram from '../components/RoleDiagram';
 import FeatureCard from '../components/FeatureCard';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useAuth } from '../utils/AuthContext';
 
 const Researcher = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const { isAuthenticated, userRole, login, registerUser, actor } = useAuth();
+
+  const handleAccess = async () => {
+    setLoading(true);
+    try {
+      if (!isAuthenticated) {
+        await login();
+      } else if (userRole === 'None') {
+        await registerUser('Researcher');
+        navigate("/dashboard/researcher");
+      } else {
+        navigate("/dashboard/researcher");
+      }
+    } catch (err) {
+      console.error("Error accessing researcher dashboard:", err);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
   const beforeItems = [
     "Limited access to diverse medical datasets",
     "Complex approval processes and delays",
@@ -74,12 +98,13 @@ const Researcher = () => {
             Conduct groundbreaking research while maintaining the highest privacy standards.
           </p>
 
-          <Link
-            to="/dashboard/researcher"
-            className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-xl hover:from-accent-600 hover:to-primary-600 transform hover:scale-105 transition-all duration-200 neon-glow"
+          <button
+            onClick={handleAccess}
+            disabled={loading}
+            className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-accent-500 to-primary-500 text-white font-semibold rounded-xl hover:from-accent-600 hover:to-primary-600 transform hover:scale-105 transition-all duration-200 neon-glow disabled:opacity-50"
           >
-            Access Research Portal
-          </Link>
+            {loading ? "Preparing your dashboard..." : "Access Research Portal"}
+          </button>
         </motion.div>
 
         {/* Problem vs Solution */}

@@ -2,9 +2,33 @@ import { motion } from 'framer-motion';
 import { Stethoscope, Clock, FileText, Users, Shield, Search, Bell, TrendingUp } from 'lucide-react';
 import RoleDiagram from '../components/RoleDiagram';
 import FeatureCard from '../components/FeatureCard';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useAuth } from '../utils/AuthContext';
 
 const Doctor = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const { isAuthenticated, userRole, login, registerUser, actor } = useAuth();
+
+  const handleAccess = async () => {
+    setLoading(true);
+    try {
+      if (!isAuthenticated) {
+        await login();
+      } else if (userRole === 'None') {
+        await registerUser('Doctor');
+        navigate("/dashboard/doctor");
+      } else {
+        navigate("/dashboard/doctor");
+      }
+    } catch (err) {
+      console.error("Error accessing doctor dashboard:", err);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
   const beforeItems = [
     "Fragmented patient records across systems",
     "Time-consuming record requests and transfers",
@@ -74,12 +98,13 @@ const Doctor = () => {
             you get the complete picture while respecting privacy and maintaining trust.
           </p>
 
-          <Link
-            to="/dashboard/doctor"
-            className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-secondary-500 to-primary-500 text-white font-semibold rounded-xl hover:from-secondary-600 hover:to-primary-600 transform hover:scale-105 transition-all duration-200 neon-glow"
+          <button
+            onClick={handleAccess}
+            disabled={loading}
+            className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-secondary-500 to-primary-500 text-white font-semibold rounded-xl hover:from-secondary-600 hover:to-primary-600 transform hover:scale-105 transition-all duration-200 neon-glow disabled:opacity-50"
           >
-            Access Doctor Dashboard
-          </Link>
+            {loading ? "Preparing your dashboard..." : "Access Doctor Dashboard"}
+          </button>
         </motion.div>
 
         {/* Problem vs Solution */}

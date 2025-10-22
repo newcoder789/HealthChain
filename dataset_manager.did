@@ -1,0 +1,33 @@
+type DatasetId = text;
+type RequestId = nat;
+
+type AccessStatus = variant {
+  Pending;
+  Approved;
+  Rejected;
+};
+
+type DatasetMetadata = record {
+  id: DatasetId;
+  name: text;
+  description: text;
+  record_count: nat;
+  created_at: nat64;
+  anonymized_data_reference: text;
+};
+
+type AccessRequest = record {
+  id: RequestId;
+  researcher: principal;
+  dataset_id: DatasetId;
+  purpose: text;
+  status: AccessStatus;
+};
+
+service : (main_registry_id: principal) -> {
+  "create_dataset": (text, text, nat, text) -> (variant { Ok: DatasetId; Err: text });
+  "approve_access_request": (RequestId) -> (variant { Ok; Err: text });
+  "request_access": (DatasetId, text) -> (variant { Ok: RequestId; Err: text });
+  "list_datasets": () -> (vec DatasetMetadata) query;
+  "get_my_requests": () -> (vec AccessRequest) query;
+}

@@ -1,0 +1,17 @@
+type DatasetMetadata = record {
+  id : text;
+  name : text;
+  description : text;
+  created_at : nat64;
+  anonymized_data_reference : text;
+  record_count : nat;
+};
+type Result = variant { Ok; Err : text };
+service : {
+  // Admin function to approve a researcher's access request
+  approve_access_request : (nat64) -> (Result);
+  // Admin function to create a new research dataset after anonymization
+  create_dataset : (DatasetMetadata) -> (Result);
+  list_datasets : () -> (vec DatasetMetadata) query;
+  request_access : (text, text) -> ();
+}

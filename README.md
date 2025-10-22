@@ -1,61 +1,77 @@
-# `Hospital_Chain`
+# Hospital_Chain
 
-Welcome to your new `Hospital_Chain` project and to the Internet Computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.
+## Vision
 
-To get started, you might want to explore the project directory structure and the default configuration file. Working with this project in your development environment will not affect any production deployment or identity tokens.
+Hospital_Chain is a decentralized healthcare data management system built on the Internet Computer. Our vision is to empower patients with ownership of their medical data, enhance data security and integrity, and facilitate a transparent marketplace for medical research.
 
-To learn more before you start working with `Hospital_Chain`, see the following documentation available online:
+## The Problem
 
-- [Quick Start](https://internetcomputer.org/docs/current/developer-docs/setup/deploy-locally)
-- [SDK Developer Tools](https://internetcomputer.org/docs/current/developer-docs/setup/install)
-- [Rust Canister Development Guide](https://internetcomputer.org/docs/current/developer-docs/backend/rust/)
-- [ic-cdk](https://docs.rs/ic-cdk)
-- [ic-cdk-macros](https://docs.rs/ic-cdk-macros)
-- [Candid Introduction](https://internetcomputer.org/docs/current/developer-docs/backend/candid/)
+Traditional healthcare data systems are plagued with numerous issues:
 
-If you want to start working on your project right away, you might want to try the following commands:
+*   **Data Silos:** Patient data is fragmented across various hospitals and clinics, making it difficult to get a holistic view of a patient's medical history.
+*   **Lack of Patient Control:** Patients have little to no control over who accesses their medical data and for what purpose.
+*   **Security Vulnerabilities:** Centralized databases are prime targets for data breaches, putting sensitive patient information at risk.
+*   **Inefficient Data Sharing:** Sharing data between healthcare providers and with researchers is often a cumbersome and insecure process.
+*   **Lack of Transparency:** It is difficult to track who has accessed patient data and when.
+
+## Our Solution
+
+Hospital_Chain leverages the power of blockchain to address these challenges:
+
+*   **Patient-Centric Data Ownership:** Patients have full control over their medical records. They can grant or revoke access to doctors and researchers at any time.
+*   **Enhanced Security:** All data is encrypted and stored on a decentralized network, making it highly resistant to tampering and unauthorized access.
+*   **Seamless Data Sharing:** Our platform provides a secure and efficient way for patients to share their data with healthcare providers and researchers.
+*   **Transparent Audit Trails:** Every access to a patient's data is recorded on the blockchain, creating an immutable and transparent audit trail.
+*   **Research Marketplace:** We provide a platform for researchers to request access to anonymized patient data for medical studies, while compensating patients for their contribution.
+
+## Getting Started
+
+To set up and run this project locally, follow these steps:
+
+### Prerequisites
+
+*   [Node.js](https://nodejs.org/en/)
+*   [DFINITY Canister SDK](https://internetcomputer.org/docs/current/developer-docs/setup/install/)
+
+### 1. Clone the repository
 
 ```bash
-cd Hospital_Chain/
-dfx help
-dfx canister --help
+git clone <repository-url>
+cd Hospital_Chain
 ```
 
-## Running the project locally
-
-If you want to test your project locally, you can use the following commands:
+### 2. Install dependencies
 
 ```bash
-# Starts the replica, running in the background
-dfx start --background
+npm install
+```
 
-# Deploys your canisters to the replica and generates your candid interface
+### 3. Start the local replica
+
+In a new terminal window, run:
+
+```bash
+dfx start --clean
+```
+
+### 4. Deploy the canisters
+
+```bash
 dfx deploy
 ```
 
-Once the job completes, your application will be available at `http://localhost:4943?canisterId={asset_canister_id}`.
+### 5. Start the frontend development server
 
-If you have made changes to your backend canister, you can generate a new candid interface with
-
-```bash
-npm run generate
-```
-
-at any time. This is recommended before starting the frontend development server, and will be run automatically any time you run `dfx deploy`.
-
-If you are making frontend changes, you can start a development server with
+In another terminal window, run:
 
 ```bash
-npm start
+npm run dev
 ```
 
-Which will start a server at `http://localhost:8080`, proxying API requests to the replica at port 4943.
+Your application will be running at the URL provided in the terminal.
 
-### Note on frontend environment variables
+## Technology Stack
 
-If you are hosting frontend code somewhere without using DFX, you may need to make one of the following adjustments to ensure your project does not fetch the root key in production:
-
-- set`DFX_NETWORK` to `ic` if you are using Webpack
-- use your own preferred method to replace `process.env.DFX_NETWORK` in the autogenerated declarations
-  - Setting `canisters -> {asset_canister_id} -> declarations -> env_override to a string` in `dfx.json` will replace `process.env.DFX_NETWORK` with the string in the autogenerated declarations
-- Write your own `createActor` constructor
+*   **Backend:** Rust, Internet Computer Protocol
+*   **Frontend:** React, Vite, Tailwind CSS
+*   **Database:** Internet Computer Canisters
